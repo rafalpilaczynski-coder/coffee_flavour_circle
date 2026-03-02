@@ -34,10 +34,72 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     super.dispose();
   }
 
+Widget _buildAutocompleteField({
+    required String label,
+    required List<String> options,
+    required String initialValue,
+    required Function(String) onSelected,
+    required Function(String) onChanged,
+  }) {
+    return Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
+        return options.where((String option) {
+          return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+        });
+      },
+      onSelected: onSelected,
+      // Budowanie pola wejściowego, aby pasowało do stylu aplikacji
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        // Synchronizacja z początkową wartością, jeśli kontroler jest pusty
+        if (controller.text.isEmpty && initialValue.isNotEmpty) {
+          controller.text = initialValue;
+        }
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(labelText: label),
+          onChanged: onChanged,
+        );
+      },
+      // Stylistyka listy podpowiedzi
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: appSurface,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width - 64, // Szerokość dopasowana do ekranu
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.white10),
+                itemBuilder: (BuildContext context, int index) {
+                  final String option = options.elementAt(index);
+                  return ListTile(
+                    title: Text(option, style: const TextStyle(color: appTextPrimary)),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tastingData = ref.watch(tastingProvider);
     final notifier = ref.read(tastingProvider.notifier);
+
+  // 2. TUTAJ: Wywołanie dostawców unikalnych nazw (z Twojego tasting_provider.dart)
+    final roasteries = ref.watch(uniqueRoasteriesProvider);
+    final grinders = ref.watch(uniqueGrindersProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Brew Parameters'), centerTitle: true),
@@ -65,9 +127,11 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: _coffeeController,
-                      decoration: const InputDecoration(labelText: 'Coffee Name / Roaster (Optional)'),
+                    _buildAutocompleteField(
+                      label: 'Coffee Name / Roaster',
+                      options: roasteries, // <--- Używamy lokalnej zmiennej zamiast ref.watch
+                      initialValue: tastingData.coffeeName,
+                      onSelected: (val) => notifier.updateCoffeeName(val),
                       onChanged: (val) => notifier.updateCoffeeName(val),
                     ),
                   ],
@@ -82,9 +146,11 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
                   children: [
-                    TextField(
-                      controller: _grinderNameController,
-                      decoration: const InputDecoration(labelText: 'Grinder (e.g. Comandante, Niche)'),
+                    _buildAutocompleteField(
+                      label: 'Grinder (e.g. Comandante)',
+                      options: grinders, // <--- Używamy lokalnej zmiennej zamiast ref.watch
+                      initialValue: tastingData.grinderName,
+                      onSelected: (val) => notifier.updateGrinderName(val),
                       onChanged: (val) => notifier.updateGrinderName(val),
                     ),
                     const SizedBox(height: 12),

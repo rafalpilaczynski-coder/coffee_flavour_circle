@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
+import '../shared/taste_radar_chart.dart';
+import '../core/brewing_logic.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -21,6 +23,29 @@ class HistoryScreen extends ConsumerWidget {
       return Colors.grey;
     }
   }
+  Widget _buildFlavorRow(String main, String sub) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _getFlavorColor(main),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '$main ${sub.isNotEmpty ? "➔ $sub" : ""}',
+            style: const TextStyle(fontSize: 13, color: appTextPrimary),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +80,7 @@ class HistoryScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final session = sessions[index];
               
-              // Ekstrakcja danych
+              // 1. Ekstrakcja i formatowanie podstawowych danych
               final dateString = session['timestamp'] as String;
               final date = DateTime.parse(dateString).toLocal();
               final formattedDate = '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
@@ -66,6 +91,20 @@ class HistoryScreen extends ConsumerWidget {
               final method = session['method'] ?? 'V60';
               final score = (session['enjoyment'] as num?)?.toDouble() ?? 0.0;
               
+              // 2. Ekstrakcja wektorów smaku dla Spider Charta
+              final sweetness = (session['sweetness'] as num?)?.toDouble() ?? 5.0;
+              final acidity = (session['acidity'] as num?)?.toDouble() ?? 5.0;
+              final bitterness = (session['bitterness'] as num?)?.toDouble() ?? 5.0;
+
+              // 3. Analiza przez Asystenta Korekty
+              final suggestion = BrewingAssistant.getSuggestion(
+                sweetness: sweetness,
+                acidity: acidity,
+                bitterness: bitterness,
+                enjoyment: score,
+              );
+              
+              // 4. Ekstrakcja profilu smakowego
               final primaryMain = session['primaryFlavorMain'] ?? 'Brak';
               final primarySub = session['primaryFlavorSub'] ?? '';
               final secondaryMain = session['secondaryFlavorMain'];
@@ -73,7 +112,7 @@ class HistoryScreen extends ConsumerWidget {
 
               final uniqueKey = Key(session['timestamp'] as String);
 
-              // Algorytm kolorowania oceny końcowej
+              // Kolorystyka oceny
               Color scoreColor = score >= 4.0 
                   ? Colors.green.shade500 
                   : (score >= 3.0 ? Colors.amber.shade500 : Colors.redAccent.shade400);
@@ -95,33 +134,18 @@ class HistoryScreen extends ConsumerWidget {
                   onDismissed: (direction) async {
                     final prefs = await SharedPreferences.getInstance();
                     final savedSessions = prefs.getStringList('coffee_sessions_history') ?? [];
-
                     final originalIndex = savedSessions.length - 1 - index;
 
                     if (originalIndex >= 0 && originalIndex < savedSessions.length) {
                       savedSessions.removeAt(originalIndex);
                       await prefs.setStringList('coffee_sessions_history', savedSessions);
                     }
-
                     ref.invalidate(historyProvider);
-
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Sesja usunięta: $coffeeName', style: const TextStyle(color: Colors.white)),
-                          backgroundColor: appSurface,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      );
-                    }
                   },
-                  // Zoptymalizowana Karta Danych (Neumorfizm i Nowe Metody Kolorów)
                   child: Container(
                     decoration: BoxDecoration(
                       color: appSurface,
                       borderRadius: BorderRadius.circular(16),
-                      // Modernizacja: withValues zamiast withOpacity
                       border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                       boxShadow: [
                         BoxShadow(
@@ -133,138 +157,108 @@ class HistoryScreen extends ConsumerWidget {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Column(
                         children: [
-                          // 1. Wskaźnik liczbowy (Ocena)
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: scoreColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: scoreColor.withValues(alpha: 0.4), width: 1.5),
-                            ),
-                            child: Center(
-                              child: Text(
-                                score.toStringAsFixed(1),
-                                style: TextStyle(
-                                  color: scoreColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          
-                          // 2. Blok Danych Strukturalnych
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Nagłówek: Nazwa kawy i Data
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '$coffeeName',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: appTextPrimary,
-                                          height: 1.2,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      formattedDate,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: appTextSecondary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                
-                                // Metoda Zaparzania (Tag)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: appPrimary.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    method,
-                                    style: const TextStyle(fontSize: 11, color: appPrimary, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                
-                                // Wizualne Drzewo Smaków z Kropkami Kodu Koloru
-                                if (primaryMain != 'Brak') ...[
-                                  const Text(
-                                    'PRIMARY FLAVOR',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.2),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: _getFlavorColor(primaryMain),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          '$primaryMain ${primarySub.isNotEmpty ? "➔ $primarySub" : ""}',
-                                          style: const TextStyle(fontSize: 14, color: appTextPrimary, fontWeight: FontWeight.w500),
-                                        ),
-                                      ),
-                                    ],
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // KOLUMNA LEWA: Wizualizacja (Radar + Wynik)
+                              Column(
+                                children: [
+                                  TasteRadarChart(
+                                    sweetness: sweetness,
+                                    acidity: acidity,
+                                    bitterness: bitterness,
+                                    size: 80,
                                   ),
                                   const SizedBox(height: 8),
-                                ],
-                                
-                                if (secondaryMain != null) ...[
-                                  const Text(
-                                    'SECONDARY FLAVOR',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.2),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: _getFlavorColor(secondaryMain),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          '$secondaryMain ${secondarySub.isNotEmpty ? "➔ $secondarySub" : ""}',
-                                          style: const TextStyle(fontSize: 14, color: appTextPrimary, fontWeight: FontWeight.w500),
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    score.toStringAsFixed(1),
+                                    style: TextStyle(
+                                      color: scoreColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(width: 16),
+                              
+                              // KOLUMNA PRAWA: Dane tekstowe
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '$coffeeName',
+                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: appTextPrimary),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(formattedDate, style: const TextStyle(fontSize: 12, color: appTextSecondary)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    
+                                    // Tag metody
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: appPrimary.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        method,
+                                        style: const TextStyle(fontSize: 10, color: appPrimary, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    
+                                    // Profile smakowe z kolorowymi kropkami
+                                    if (primaryMain != 'Brak') 
+                                      _buildFlavorRow(primaryMain, primarySub),
+                                    
+                                    if (secondaryMain != null) 
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4.0),
+                                        child: _buildFlavorRow(secondaryMain, secondarySub),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // SEKCJA DOLNA: Asystent (tylko jeśli wynik < 4.0)
+                          if (score < 4.0) ...[
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: Divider(color: Colors.white10, height: 1),
+                            ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.auto_fix_high, size: 14, color: Colors.amber),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    suggestion,
+                                    style: TextStyle(
+                                      fontSize: 11, 
+                                      color: Colors.amber.withValues(alpha: 0.9), 
+                                      fontStyle: FontStyle.italic,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),

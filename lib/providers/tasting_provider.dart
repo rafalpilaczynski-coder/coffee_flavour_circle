@@ -68,3 +68,31 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
     return jsonDecode(sessionJson) as Map<String, dynamic>;
   }).toList();
 });
+
+// Dostawca unikalnych nazw kaw/palarni wyciągniętych z historii
+final uniqueRoasteriesProvider = Provider<List<String>>((ref) {
+  final historyAsync = ref.watch(historyProvider);
+  return historyAsync.maybeWhen(
+    data: (sessions) => sessions
+        .map((s) => s['coffeeName']?.toString().trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet() // Usuwa duplikaty
+        .toList()
+      ..sort(), // Sortowanie alfabetyczne
+    orElse: () => [],
+  );
+});
+
+// Dostawca unikalnych nazw młynków wyciągniętych z historii
+final uniqueGrindersProvider = Provider<List<String>>((ref) {
+  final historyAsync = ref.watch(historyProvider);
+  return historyAsync.maybeWhen(
+    data: (sessions) => sessions
+        .map((s) => s['grinderName']?.toString().trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort(),
+    orElse: () => [],
+  );
+});
