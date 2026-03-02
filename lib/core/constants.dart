@@ -1,6 +1,17 @@
 // lib/core/constants.dart
 import 'package:flutter/material.dart';
 
+// ==========================================
+// GLOBALNY SYSTEM DESIGNU (PALETA KAWOWA)
+// ==========================================
+const Color appBackground = Color(0xFF14110F);    // Głębokie Espresso (Zamiast czerni)
+const Color appSurface = Color(0xFF231F1C);       // Ciepła, ciemna szarość (Na karty i panele)
+const Color appPrimary = Color(0xFFD97706);       // Miedziany / Karmelowy akcent (Główne akcje)
+const Color appTextPrimary = Color(0xFFF3F2F1);   // Złamana biel (Czytelność bez oślepiania)
+const Color appTextSecondary = Color(0xFFA09B96); // Szary tekst pomocniczy
+
+// (Reszta Twoich stałych, np. brewMethods, aromaCategories, pozostaje bez zmian poniżej...)
+
 const List<String> brewMethods = [
   'V60', 'Kalita', 'Aeropress', 'Hario Switch', 
   'Chemex', 'Clever', 'Orea', 'Gabi'

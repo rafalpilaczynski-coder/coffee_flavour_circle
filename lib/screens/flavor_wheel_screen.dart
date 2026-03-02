@@ -1,3 +1,4 @@
+// lib/screens/flavor_wheel_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,11 +20,17 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
   WheelPhase _currentPhase = WheelPhase.primaryMain;
   String? _tempMainSelection;
   int? _tempMainIndex;
+  
+  // NOWE: Pamięć wektora kliknięcia dla animacji kinematycznej
+  Alignment _tapAlignment = Alignment.center;
 
-  void _handleSegmentTap(String categoryName, int index) {
+  void _handleSegmentTap(String categoryName, int index, Alignment tapOrigin) {
     final notifier = ref.read(tastingProvider.notifier);
 
     setState(() {
+      // Zapisujemy wektor kliknięcia, aby animacja wiedziała, skąd wystartować
+      _tapAlignment = tapOrigin;
+
       switch (_currentPhase) {
         case WheelPhase.primaryMain:
           _tempMainSelection = categoryName;
@@ -59,6 +66,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
       _currentPhase = WheelPhase.primaryMain;
       _tempMainSelection = null;
       _tempMainIndex = null;
+      _tapAlignment = Alignment.center; // Resetujemy wektor do środka
     });
   }
 
@@ -70,7 +78,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
     double baseStartAngle = -math.pi / 2;
     double totalSweepAngle = 2 * math.pi;
 
-    if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
+   if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
       activeCategories = mainFlavorCategories; 
     } else if (_tempMainSelection != null && _tempMainIndex != null) {
       final parentColor = flavorTree[_tempMainSelection]!['color'] as Color;
@@ -79,8 +87,14 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
       subList.insert(0, 'Overall\n$_tempMainSelection'); 
 
       activeCategories = subList.map((subName) => {'name': subName, 'color': parentColor}).toList();
-      totalSweepAngle = (2 * math.pi) / mainFlavorCategories.length;
-      baseStartAngle = -math.pi / 2 + (_tempMainIndex! * totalSweepAngle);
+      
+      // INŻYNIERIA KINEMATYCZNA: Obliczamy środek oryginalnego wycinka
+      double parentSweepAngle = (2 * math.pi) / mainFlavorCategories.length;
+      double parentMiddleAngle = -math.pi / 2 + (_tempMainIndex! * parentSweepAngle) + (parentSweepAngle / 2);
+
+      // Zamiast trzymać się 45 stopni, rozkładamy "wachlarz" na 160 stopni dla czytelności
+      totalSweepAngle = 160 * (math.pi / 180); // Konwersja 160 stopni na radiany
+      baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2); // Centrowanie wachlarza
     }
 
     return Scaffold(
@@ -102,15 +116,16 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                   child: Center(child: Icon(Icons.check_circle, size: 100, color: Colors.green))
                 )
               : AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 400),
-                  switchInCurve: Curves.easeOutCubic,
+                  duration: const Duration(milliseconds: 550), // Wydłużony czas dla płynności
+                  switchInCurve: Curves.easeOutBack, // Fizyczne "odbicie" (overshoot) na końcu
                   switchOutCurve: Curves.easeInCubic,
                   transitionBuilder: (Widget child, Animation<double> animation) {
                     return FadeTransition(
                       opacity: animation,
                       child: ScaleTransition(
-                        scale: Tween<double>(begin: 0.8, end: 1.0).animate(animation),
-                        alignment: Alignment.center,
+                        scale: Tween<double>(begin: 0.2, end: 1.0).animate(animation),
+                        // UŻYCIE WEKTORA: Animacja skalowania zaczyna się od klikniętego punktu
+                        alignment: _tapAlignment,
                         child: child,
                       ),
                     );
@@ -131,7 +146,15 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                       if (relativeAngle <= totalSweepAngle) {
                         int index = (relativeAngle / totalSweepAngle * activeCategories.length).floor();
                         if (index == activeCategories.length) index--; 
-                        _handleSegmentTap(activeCategories[index]['name'], index);
+                        
+                        // OBLICZANIE WEKTORA KINEMATYCZNEGO
+                        double segmentSweep = totalSweepAngle / activeCategories.length;
+                        double segmentMiddleAngle = baseStartAngle + (index * segmentSweep) + (segmentSweep / 2);
+                        
+                        // Mapowanie biegunowe na płaszczyznę kartezjańską Alignment (-1 do 1)
+                        Alignment tapAlign = Alignment(math.cos(segmentMiddleAngle), math.sin(segmentMiddleAngle));
+
+                        _handleSegmentTap(activeCategories[index]['name'], index, tapAlign);
                       }
                     },
                     child: CustomPaint(
@@ -238,10 +261,14 @@ class WheelPainter extends CustomPainter {
     }
     canvas.rotate(rotation);
 
+    final formattedText = text.replaceFirst('/', '/\n');
     final textSpan = TextSpan(
-      text: text,
+      text: formattedText,
       style: const TextStyle(
-        color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold,
+        color: Colors.white, 
+        fontSize: 10, 
+        fontWeight: FontWeight.bold,
+        height: 1.1, // Zmniejszenie odstępu między wierszami
         shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
       ),
     );

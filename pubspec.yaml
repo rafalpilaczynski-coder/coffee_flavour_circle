@@ -38,6 +38,7 @@ dependencies:
   shared_preferences: ^2.2.2
   cupertino_icons: ^1.0.8
   state_notifier: ^1.0.0
+  google_fonts: ^8.0.2
   
 
 dev_dependencies:

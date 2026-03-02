@@ -2,7 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:google_fonts/google_fonts.dart';
+import 'core/constants.dart'; // Upewnij się, że ten import istnieje, by czytać kolory
 // Importy ekranów - edytor podświetli je na czerwono, dopóki nie utworzymy tych plików
 import 'screens/welcome_screen.dart';
 import 'screens/brew_parameters_screen.dart';
@@ -39,8 +40,52 @@ class CoffeeApp extends StatelessWidget {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Coffee Flavour Circle',
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF121212),
+      theme: ThemeData(
+        // 1. Ustawienie jasności i głównych kolorów tła
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: appBackground,
+        primaryColor: appPrimary,
+        colorScheme: const ColorScheme.dark(
+          primary: appPrimary,
+          surface: appSurface,
+        ),
+        
+        // 2. Nadpisanie globalnej typografii na Google Fonts (Montserrat)
+        textTheme: GoogleFonts.montserratTextTheme(ThemeData.dark().textTheme).copyWith(
+          bodyMedium: const TextStyle(color: appTextPrimary),
+          bodyLarge: const TextStyle(color: appTextPrimary),
+          titleMedium: const TextStyle(color: appTextSecondary),
+        ),
+
+        // 3. Globalny styl dla Paska Górnego (AppBar)
+        appBarTheme: AppBarTheme(
+          backgroundColor: appBackground,
+          elevation: 0, // Płaski, nowoczesny wygląd
+          centerTitle: true,
+          titleTextStyle: GoogleFonts.montserrat(
+            fontSize: 20, 
+            fontWeight: FontWeight.w600, 
+            color: appTextPrimary,
+            letterSpacing: 1.2, // Delikatne rozstrzelenie liter dla elegancji
+          ),
+          iconTheme: const IconThemeData(color: appPrimary), // Miedziane ikony nawigacji
+        ),
+
+        // 4. Globalny styl dla Kart (Surface)
+        cardTheme: CardThemeData(
+          color: appSurface,
+          elevation: 4,
+          shadowColor: Colors.black.withValues(alpha: 0.4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+
+        // 5. Globalny styl dla Sliderów (Suwaków)
+        sliderTheme: SliderThemeData(
+          activeTrackColor: appPrimary,
+          inactiveTrackColor: appPrimary.withValues(alpha: 0.2),
+          thumbColor: appPrimary,
+          overlayColor: appPrimary.withValues(alpha: 0.1),
+        ),
       ),
       routerConfig: _router,
     );
