@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/foundation.dart';
 
 // ==========================================
 // 1. MODEL DANYCH (STAN)
@@ -9,6 +11,8 @@ class TastingState {
   // Parametry wejściowe
   final String method;
   final String coffeeName;
+  final String beanDetails; // NOWE POLE: Ziarno i pochodzenie
+
   final double dose;
   final double waterVolume;
   final double temperature;
@@ -36,6 +40,8 @@ class TastingState {
   const TastingState({
     this.method = '',
     this.coffeeName = '',
+    this.beanDetails = '', // 2. Konstruktor
+
     this.dose = 15.0,
     this.waterVolume = 250.0,
     this.temperature = 96.0,
@@ -61,6 +67,8 @@ class TastingState {
   TastingState copyWith({
     String? method,
     String? coffeeName,
+    String? beanDetails, // 3. Parametr copyWith
+
     double? dose,
     double? waterVolume,
     double? temperature,
@@ -85,6 +93,8 @@ class TastingState {
     return TastingState(
       method: method ?? this.method,
       coffeeName: coffeeName ?? this.coffeeName,
+      beanDetails: beanDetails ?? this.beanDetails, // Przypisanie w copyWith
+
       dose: dose ?? this.dose,
       waterVolume: waterVolume ?? this.waterVolume,
       temperature: temperature ?? this.temperature,
@@ -113,6 +123,7 @@ class TastingState {
     return {
       'method': method,
       'coffeeName': coffeeName,
+      'beanDetails': beanDetails, // 4. Serializacja do bazy (Historii)
       'dose': dose,
       'waterVolume': waterVolume,
       'temperature': temperature,
@@ -146,6 +157,7 @@ class TastingNotifier extends Notifier<TastingState> {
   // Akcje modyfikacji parametrów fizycznych
   void updateMethod(String value) => state = state.copyWith(method: value);
   void updateCoffeeName(String value) => state = state.copyWith(coffeeName: value);
+  void updateBeanDetails(String value) => state = state.copyWith(beanDetails: value);
   void updateDose(double value) => state = state.copyWith(dose: value);
   void updateWaterVolume(double value) => state = state.copyWith(waterVolume: value);
   void updateTemperature(double value) => state = state.copyWith(temperature: value);
@@ -257,19 +269,35 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
 });
 
 // Zwraca unikalną listę wszystkich wpisanych wcześniej kaw (do autouzupełniania)
-final uniqueRoasteriesProvider = Provider<List<String>>((ref) {
+final staticRoasteriesProvider = FutureProvider<List<String>>((ref) async {
+  try {
+    final String response = await rootBundle.loadString('assets/roasteries.json');
+    final List<dynamic> data = jsonDecode(response);
+    
+    // Zakładając, że Twój JSON to lista obiektów np. [{"name": "La Cabra"}, ...]
+    // Jeśli JSON to po prostu płaska lista ["La Cabra", "Onyx"], zmień to na: return List<String>.from(data);
+    return data.map((e) => e['name'].toString()).toList();
+  } catch (e) {
+    debugPrint('Błąd ładowania bazy palarni: $e');
+    return [];
+  }
+});
+
+// 2. Fuzja: Baza JSON + Własna historia użytkownika
+final combinedRoasteriesProvider = FutureProvider<List<String>>((ref) async {
   final history = ref.watch(historyProvider).value ?? [];
-  final Set<String> uniqueNames = {};
+  final staticList = ref.watch(staticRoasteriesProvider).value ?? [];
+
+  // Użycie Set gwarantuje absolutną deduplikację przy minimalnym koszcie obliczeniowym
+  final Set<String> unique = {...staticList};
   
-  for (var session in history) {
-    final coffeeName = session['coffeeName']?.toString().trim();
-    if (coffeeName != null && coffeeName.isNotEmpty) {
-      uniqueNames.add(coffeeName);
+  for (var s in history) {
+    if (s['coffeeName']?.toString().isNotEmpty ?? false) {
+      unique.add(s['coffeeName']);
     }
   }
   
-  final sortedList = uniqueNames.toList()..sort();
-  return sortedList;
+  return unique.toList()..sort(); // Zwracamy posortowaną alfabetycznie listę
 });
 
 // Zwraca unikalną listę historycznie użytych młynków (do autouzupełniania)

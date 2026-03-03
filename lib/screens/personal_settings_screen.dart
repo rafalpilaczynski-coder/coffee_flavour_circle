@@ -63,12 +63,12 @@ void _saveChanges() {
     notifier.saveAllPreferences(_localActiveMethods, newGrinders);
     
     // Wymuszenie powrotu do Menu Głównego (Ekranu Powitalnego)
-    context.go('/'); 
+    context.push('/'); 
   }
 
   void _discardChanges() {
     // Wymuszenie powrotu do Menu Głównego bez zapisu stanu
-    context.go('/');
+    context.push('/');
   }
 
   @override

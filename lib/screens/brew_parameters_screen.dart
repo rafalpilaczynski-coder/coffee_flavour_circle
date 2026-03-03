@@ -1,3 +1,4 @@
+// lib/screens/brew_parameters_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ class BrewParametersScreen extends ConsumerStatefulWidget {
 class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
   late TextEditingController _coffeeController;
   late TextEditingController _grinderSettingController;
+  late TextEditingController _beanDetailsController;
 
   @override
   void initState() {
@@ -23,18 +25,20 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final initialState = ref.read(tastingProvider);
     _coffeeController = TextEditingController(text: initialState.coffeeName);
     _grinderSettingController = TextEditingController(text: initialState.grinderSetting);
+    _beanDetailsController = TextEditingController(text: initialState.beanDetails);
   }
 
   @override
   void dispose() {
     _coffeeController.dispose();
     _grinderSettingController.dispose();
+    _beanDetailsController.dispose();
     super.dispose();
   }
 
   Widget _buildAutocompleteField({
     required String label,
-    required List<String> options,
+    required Iterable<String> options, // Zmiana z List na Iterable (standard dla Autocomplete)
     required String initialValue,
     required Function(String) onSelected,
     required Function(String) onChanged,
@@ -42,7 +46,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     return Autocomplete<String>(
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
-        return options.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+        return options.where((String option) => 
+            option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
@@ -52,13 +57,15 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
           focusNode: focusNode,
           decoration: InputDecoration(
             labelText: label,
-            isDense: true, // Zmniejsza wysokość pola tekstowego
+            isDense: true,
             contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           ),
           onChanged: onChanged,
         );
       },
       optionsViewBuilder: (context, onSelected, options) {
+        // Twarde rzutowanie Iterable do Listy, co zapobiega błędom RangeError
+        final optionsList = options.toList(); 
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -66,13 +73,13 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
             borderRadius: BorderRadius.circular(8),
             color: appSurface,
             child: SizedBox(
-              width: MediaQuery.of(context).size.width / 2 - 24, // Połowa ekranu minus marginesy
+              width: MediaQuery.of(context).size.width / 2 - 24,
               child: ListView.builder(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
-                itemCount: options.length,
+                itemCount: optionsList.length,
                 itemBuilder: (context, index) {
-                  final option = options.elementAt(index);
+                  final option = optionsList[index]; // Bezpieczny odczyt po indeksie
                   return ListTile(
                     dense: true,
                     title: Text(option, style: const TextStyle(color: appTextPrimary, fontSize: 13)),
@@ -89,21 +96,50 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. ODCZYT DANYCH STANOWYCH
     final tastingData = ref.watch(tastingProvider);
     final notifier = ref.read(tastingProvider.notifier);
     final userPrefs = ref.watch(userPreferencesProvider);
-    final roasteries = ref.watch(uniqueRoasteriesProvider);
+    
+    // INŻYNIERIA BŁĘDU: Pobieramy cały obiekt asynchroniczny, nie tylko ".value"
+    final asyncRoasteries = ref.watch(combinedRoasteriesProvider);
 
+    // 2. LOGIKA MŁYNKÓW I METOD (bez zmian)
     final activeMethods = userPrefs.activeMethods.isNotEmpty ? userPrefs.activeMethods : ['V60'];
     final selectedMethod = activeMethods.contains(tastingData.method) ? tastingData.method : activeMethods.first;
 
     final activeGrinders = userPrefs.grinders.where((g) => g.trim().isNotEmpty).toList();
-    if (!activeGrinders.contains('')) activeGrinders.insert(0, '');
-    final selectedGrinder = activeGrinders.contains(tastingData.grinderName) ? tastingData.grinderName : activeGrinders.first;
+    final defaultGrinder = activeGrinders.isNotEmpty ? activeGrinders.first : '';
+    
+    if (!activeGrinders.contains('')) activeGrinders.add('');
 
-    final lastSetting = userPrefs.lastGrinderSettings[selectedGrinder];
-    final hintText = (lastSetting != null && lastSetting.trim().isNotEmpty && selectedGrinder.isNotEmpty) 
-        ? 'last setting: $lastSetting' 
+    final selectedGrinder = (tastingData.grinderName.isEmpty && defaultGrinder.isNotEmpty) 
+        ? defaultGrinder 
+        : (activeGrinders.contains(tastingData.grinderName) ? tastingData.grinderName : defaultGrinder);
+
+    if (tastingData.grinderName != selectedGrinder) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.updateGrinderName(selectedGrinder);
+      });
+    }
+
+    final history = ref.watch(historyProvider).value ?? [];
+    String? lastSetting;
+    
+    if (selectedGrinder.isNotEmpty) {
+      try {
+        final lastSession = history.firstWhere(
+          (session) => session['grinderName'] == selectedGrinder && 
+                       (session['grinderSetting']?.toString().trim().isNotEmpty ?? false)
+        );
+        lastSetting = lastSession['grinderSetting'].toString();
+      } catch (_) {
+        lastSetting = null; 
+      }
+    }
+
+    final hintText = (lastSetting != null && lastSetting.isNotEmpty) 
+        ? 'last: $lastSetting' 
         : 'e.g. 24';
 
     final dose = tastingData.dose;
@@ -111,163 +147,296 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final ratio = dose > 0 ? (water / dose) : 0.0;
     final isOutlier = dose > 0 && water > 0 && (ratio < 12.0 || ratio > 20.0);
 
+    // 3. RENDEROWANIE EKRANU Z ZABEZPIECZENIEM ASYNCHRONICZNYM
     return Scaffold(
       appBar: AppBar(
         title: const Text('Brew Parameters', style: TextStyle(fontSize: 18)), 
         centerTitle: true,
-        toolbarHeight: 48, // Węższy AppBar
+        toolbarHeight: 48,
       ),
-      // SafeArea zapewnia, że elementy nie wejdą pod systemowe paski (notch/home bar)
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Zblokowana karta parametrów wejściowych (2x2 Grid)
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    children: [
-                      Row(
+        // INŻYNIERIA BŁĘDU: Używamy .when(), aby nie rysować ekranu dopóki JSON nie zostanie wczytany
+        child: asyncRoasteries.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, stack) => Center(child: Text('Błąd ładowania danych: $err')),
+          data: (roasteries) {
+            // Główna zawartość ładuje się dopiero, gdy roasteries są w pełni gotowe
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: selectedMethod,
-                              decoration: const InputDecoration(labelText: 'Method', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
-                              items: activeMethods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13)))).toList(),
-                              onChanged: (val) { if (val != null) notifier.updateMethod(val); },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: selectedGrinder,
-                              decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
-                              items: activeGrinders.map((g) => DropdownMenuItem(value: g, child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 13)))).toList(),
-                              onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildAutocompleteField(
-                              label: 'Coffee / Roaster',
-                              options: roasteries,
-                              initialValue: tastingData.coffeeName,
-                              onSelected: (val) => notifier.updateCoffeeName(val),
-                              onChanged: (val) => notifier.updateCoffeeName(val),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _grinderSettingController,
-                              decoration: InputDecoration(
-                                labelText: 'Clicks/Setting',
-                                hintText: hintText,
-                                hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedMethod,
+                                  dropdownColor: const Color(0xFF1E1A18), 
+                                  iconSize: 28,
+                                  decoration: const InputDecoration(labelText: 'Method', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
+                                  items: activeMethods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)))).toList(),
+                                  onChanged: (val) { if (val != null) notifier.updateMethod(val); },
+                                ),
                               ),
-                              onChanged: (val) => notifier.updateGrinderSetting(val),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedGrinder,
+                                  dropdownColor: const Color(0xFF1E1A18),
+                                  iconSize: 28,
+                                  decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
+                                  items: activeGrinders.map((g) => DropdownMenuItem(value: g, child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)))).toList(),
+                                  onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildAutocompleteField(
+                                  label: 'Roaster (Palarnia)', 
+                                  options: roasteries, // Bezpieczne przekazanie gotowej listy
+                                  initialValue: tastingData.coffeeName,
+                                  onSelected: (val) => notifier.updateCoffeeName(val),
+                                  onChanged: (val) => notifier.updateCoffeeName(val),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _grinderSettingController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Clicks/Setting',
+                                    hintText: hintText,
+                                    hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                  ),
+                                  onChanged: (val) => notifier.updateGrinderSetting(val),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _beanDetailsController,
+                            decoration: const InputDecoration(
+                              labelText: 'Bean & Origin (np. Ethiopia Yirgacheffe Washed)',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                             ),
+                            onChanged: (val) => notifier.updateBeanDetails(val),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Sekcja suwaków ściśnięta do maksimum
-              Expanded(
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildCompactSliderRow('Temp', '${tastingData.temperature.toStringAsFixed(1)} °C', Colors.blue, 
-                          Slider(value: tastingData.temperature, min: 80, max: 100, divisions: 200, onChanged: (val) => notifier.updateTemperature(val))),
-                        
-                        _buildCompactSliderRow('Yield', '${tastingData.waterVolume.toInt()} ml', Colors.lightBlueAccent, 
-                          Slider(value: tastingData.waterVolume, min: 50, max: 1000, divisions: 950, onChanged: (val) => notifier.updateWaterVolume(val))),
-                        
-                        _buildCompactSliderRow('Dose', '${tastingData.dose.toStringAsFixed(1)} g', Colors.green, 
-                          Slider(value: tastingData.dose, min: 5, max: 50, divisions: 450, onChanged: (val) => notifier.updateDose(val))),
-
-                        Text(
-                          'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
-                        ),
-                      ],
                     ),
                   ),
-                ),
-              ),
 
-              if (isOutlier)
-                Container(
-                  margin: const EdgeInsets.only(top: 8.0),
-                  padding: const EdgeInsets.all(8.0),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Non-standard ratio (1:${ratio.toStringAsFixed(1)}). Optimal: 1:12 - 1:20.',
-                          style: const TextStyle(color: Colors.orange, fontSize: 11),
+                  const SizedBox(height: 12),
+
+                  Expanded(
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            SliderWithTextInput(
+                              label: 'Temp', value: tastingData.temperature, min: 80, max: 100, divisions: 200, suffix: '°C', color: Colors.blue,
+                              onChanged: (val) => notifier.updateTemperature(val),
+                            ),
+                            SliderWithTextInput(
+                              label: 'Yield', value: tastingData.waterVolume, min: 50, max: 1000, divisions: 950, suffix: 'ml', color: Colors.lightBlueAccent,
+                              onChanged: (val) => notifier.updateWaterVolume(val),
+                            ),
+                            SliderWithTextInput(
+                              label: 'Dose', value: tastingData.dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
+                              onChanged: (val) => notifier.updateDose(val),
+                            ),
+
+                            Text(
+                              'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
 
-              const SizedBox(height: 12),
-              PrimaryActionButton(
-                label: 'NEXT: FRAGRANCE ANALYSIS',
-                onPressed: () => context.go('/fragrance'),
+                  if (isOutlier)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8.0),
+                      padding: const EdgeInsets.all(8.0),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Non-standard ratio (1:${ratio.toStringAsFixed(1)}). Optimal: 1:12 - 1:20.',
+                              style: const TextStyle(color: Colors.orange, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+                  PrimaryActionButton(
+                    label: 'NEXT: FRAGRANCE ANALYSIS',
+                    onPressed: () => context.push('/fragrance'),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
+}
+// ============================================================================
+// KOMPONENT HYBRYDOWY: Suwak zsynchronizowany z klawiaturą (Slider + TextField)
+// ============================================================================
+class SliderWithTextInput extends StatefulWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String suffix;
+  final Color color;
+  final ValueChanged<double> onChanged;
 
-  Widget _buildCompactSliderRow(String label, String value, Color color, Widget slider) {
+  const SliderWithTextInput({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.suffix,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  State<SliderWithTextInput> createState() => _SliderWithTextInputState();
+}
+
+class _SliderWithTextInputState extends State<SliderWithTextInput> {
+  late TextEditingController _controller;
+  late FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _formatValue(widget.value));
+    _focusNode = FocusNode();
+    
+    // Zabezpieczenie: jeśli użytkownik kliknie gdzie indziej, pole resetuje się do poprawnej wartości
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) {
+        _controller.text = _formatValue(widget.value);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SliderWithTextInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Aktualizujemy pole tekstowe gdy zmieni się suwak, ALE NIE gdy użytkownik właśnie wpisuje
+    if (oldWidget.value != widget.value && !_focusNode.hasFocus) {
+      _controller.text = _formatValue(widget.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  String _formatValue(double val) {
+    if (val == val.toInt().toDouble()) return val.toInt().toString();
+    return val.toStringAsFixed(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-            Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+            Text(widget.label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            
+            // Okienko wpisywania wartości
+            Container(
+              width: 75,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: widget.color.withValues(alpha: 0.5)),
+              ),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold, color: widget.color, fontSize: 14),
+                decoration: InputDecoration(
+                  suffixText: widget.suffix,
+                  suffixStyle: TextStyle(color: widget.color.withValues(alpha: 0.7), fontSize: 11),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  border: InputBorder.none,
+                ),
+                onSubmitted: (val) {
+                  // Inteligentne parsowanie (obsługuje kropki i polskie przecinki)
+                  final parsed = double.tryParse(val.replaceAll(',', '.'));
+                  if (parsed != null && parsed >= widget.min && parsed <= widget.max) {
+                    widget.onChanged(parsed);
+                  } else {
+                    _controller.text = _formatValue(widget.value);
+                  }
+                },
+              ),
+            ),
           ],
         ),
-        // Wykorzystanie SliderTheme do zredukowania ukrytego paddingu suwaka
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 2.0,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
+            activeTrackColor: widget.color,
+            thumbColor: widget.color,
+            overlayColor: widget.color.withValues(alpha: 0.2),
           ),
-          child: slider,
+          child: Slider(
+            value: widget.value,
+            min: widget.min,
+            max: widget.max,
+            divisions: widget.divisions,
+            onChanged: widget.onChanged,
+          ),
         ),
       ],
     );

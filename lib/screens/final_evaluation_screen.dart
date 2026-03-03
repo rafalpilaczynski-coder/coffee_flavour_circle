@@ -261,7 +261,7 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
                       ),
                     ),
                   );
-                  context.go('/');
+                  context.push('/');
                 }
               },
             ),

@@ -25,7 +25,7 @@ class WelcomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 40.0),
               child: PrimaryActionButton(
                 label: 'START TASTING',
-                onPressed: () => context.go('/brew'),
+                onPressed: () => context.push('/brew'),
               ),
             ),
             
@@ -40,7 +40,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.history),
                   label: const Text('VIEW HISTORY', style: TextStyle(fontWeight: FontWeight.bold)),
-                  onPressed: () => context.go('/history'),
+                  onPressed: () => context.push('/history'),
                 ),
               ),
             ),
@@ -59,7 +59,7 @@ class WelcomeScreen extends StatelessWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFFC27D56), // Nasz miedziany akcent
                   ),
-                  onPressed: () => context.go('/settings'),
+                  onPressed: () => context.push('/settings'),
                 ),
               ),
             ),

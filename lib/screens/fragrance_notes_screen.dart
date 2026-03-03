@@ -81,7 +81,7 @@ class _FragranceNotesScreenState extends ConsumerState<FragranceNotesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: PrimaryActionButton(
               label: 'NEXT: FLAVOR WHEEL',
-              onPressed: () => context.go('/wheel'),
+              onPressed: () => context.push('/wheel'),
             ),
           ),
         ],

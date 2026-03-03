@@ -118,11 +118,11 @@ Future<void> _loadAllIcons() async {
 
     if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
       activeCategories = mainFlavorCategories; 
-} else if (_tempMainSelection != null && _tempMainIndex != null) {
+    } else if (_tempMainSelection != null && _tempMainIndex != null) {
       final treeNode = flavorTree[_tempMainSelection];
       
       // DIAGNOSTYKA: Jawny komunikat błędu zamiast cichego resetu
-if (treeNode == null) {
+    if (treeNode == null) {
         // Miękki reset (Graceful Degradation) zamiast błędu krytycznego
         WidgetsBinding.instance.addPostFrameCallback((_) => _resetWheel());
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -245,7 +245,7 @@ if (treeNode == null) {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: PrimaryActionButton(
               label: 'NEXT: FINAL EVALUATION',
-              onPressed: () => context.go('/evaluation'),
+              onPressed: () => context.push('/evaluation'),
             ),
           ),
         ],
@@ -309,12 +309,12 @@ class WheelPainter extends CustomPainter {
     }
 
     // Środek koła
-    canvas.drawCircle(center, radius * 0.3, Paint()..color = const Color(0xFF121212));
+    canvas.drawCircle(center, radius * 0.25, Paint()..color = const Color(0xFF121212));
   }
 
   void _drawBlackIcon(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, ui.Image image) {
     final double midAngle = startAngle + (sweepAngle / 2);
-    final double iconRadius = radius * 0.78; // Odsunięcie od środka (bliżej zewnętrznej krawędzi)
+    final double iconRadius = radius * 0.82; // Odsunięcie od środka (bliżej zewnętrznej krawędzi)
     
     final double imgX = center.dx + iconRadius * math.cos(midAngle);
     final double imgY = center.dy + iconRadius * math.sin(midAngle);
@@ -351,14 +351,18 @@ class WheelPainter extends CustomPainter {
     canvas.rotate(rotation);
 
     final formattedText = text.replaceFirst('/', '/\n');
-    final textSpan = TextSpan(
+final textSpan = TextSpan(
       text: formattedText,
       style: const TextStyle(
         color: Colors.white, 
-        fontSize: 10, 
-        fontWeight: FontWeight.bold,
-        height: 1.1,
-        shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
+        fontSize: 11.5, // ZWIĘKSZONO Z 10 NA 13
+        fontWeight: FontWeight.w800, // MAKSYMALNA GRUBOŚĆ (Black)
+        height: 1.05,
+        // ZWIĘKSZONO KONTRAST CIENIA (ciemniejszy i wyraźniejszy obrys)
+        shadows: [
+          Shadow(color: Colors.black, blurRadius: 4),
+          Shadow(color: Colors.black, blurRadius: 2),
+        ],
       ),
     );
     final textPainter = TextPainter(text: textSpan, textAlign: TextAlign.center, textDirection: TextDirection.ltr);

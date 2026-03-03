@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart'; // Dodaj intl do pubspec.yaml dla formatowania dat
 import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
+import '../shared/taste_radar_chart.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -44,7 +45,11 @@ class HistoryItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DateTime date = DateTime.parse(session['timestamp']);
-    final String coffeeName = session['coffeeName'] ?? 'Unknown Coffee';
+    final String coffeeName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
+    
+    // INŻYNIERIA DANYCH: Pobieramy nowe pole beanDetails
+    final String beanDetails = session['beanDetails'] ?? '';
+    
     final List<dynamic> defects = session['defects'] ?? [];
     final List<dynamic> dryNotes = session['dryNotes'] ?? [];
     final List<dynamic> wetNotes = session['wetNotes'] ?? [];
@@ -56,8 +61,28 @@ class HistoryItemCard extends StatelessWidget {
       child: ExpansionTile(
         backgroundColor: const Color(0xFF1E1A18),
         collapsedBackgroundColor: const Color(0xFF1E1A18),
+        // Główny tytuł: Palarnia
         title: Text(coffeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        subtitle: Text(DateFormat('yyyy-MM-dd | HH:mm').format(date), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        // Podtytuł: Ziarno (jeśli istnieje) + Data
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (beanDetails.isNotEmpty) ...[
+                Text(
+                  beanDetails,
+                  style: const TextStyle(fontSize: 14, color: Colors.white, fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 4),
+              ],
+              Text(
+                DateFormat('yyyy-MM-dd | HH:mm').format(date),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
         trailing: _buildRatingBadge(session['enjoyment'] ?? 0.0),
         children: [
           Padding(
@@ -81,9 +106,14 @@ class HistoryItemCard extends StatelessWidget {
                 // 2. FRAGRANCE & AROMA (TAGI)
                 if (dryNotes.isNotEmpty || wetNotes.isNotEmpty) ...[
                   _buildSectionHeader('FRAGRANCE / AROMA'),
-                  _buildTagWrap('Dry: ', dryNotes, Colors.amber.withValues(alpha: 0.2)),
-                  const SizedBox(height: 8),
-                  _buildTagWrap('Wet: ', wetNotes, Colors.blue.withValues(alpha: 0.2)),
+                  if (dryNotes.isNotEmpty) ...[
+                    _buildTagWrap('Dry: ', dryNotes, Colors.amber.withValues(alpha: 0.2)),
+                    const SizedBox(height: 8),
+                  ],
+                  if (wetNotes.isNotEmpty) ...[
+                    _buildTagWrap('Wet: ', wetNotes, Colors.blue.withValues(alpha: 0.2)),
+                    const SizedBox(height: 8),
+                  ],
                   const Divider(height: 32, color: Colors.white10),
                 ],
 
@@ -92,8 +122,21 @@ class HistoryItemCard extends StatelessWidget {
                 _buildFlavorRow(session['primaryFlavorMain'], session['primaryFlavorSub'], isPrimary: true),
                 const SizedBox(height: 8),
                 _buildFlavorRow(session['secondaryFlavorMain'], session['secondaryFlavorSub']),
-                const Divider(height: 32, color: Colors.white10),
+                
+                const SizedBox(height: 24),
+                
+                // TWÓJ ORYGINALNY WYKRES (fl_chart)
+                Center(
+                  child: TasteRadarChart(
+                    sweetness: (session['sweetness'] ?? 5.0).toDouble(),
+                    acidity: (session['acidity'] ?? 5.0).toDouble(),
+                    bitterness: (session['bitterness'] ?? 5.0).toDouble(),
+                    size: 120, // Lekko powiększony dla lepszej widoczności
+                  ),
+                ),
 
+                const Divider(height: 32, color: Colors.white10),
+                
                 // 4. DEFEKTY (JEŚLI SĄ)
                 if (defects.isNotEmpty) ...[
                   _buildSectionHeader('SCA DEFECTS'),
