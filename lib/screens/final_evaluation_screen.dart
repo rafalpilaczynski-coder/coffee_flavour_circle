@@ -5,12 +5,39 @@ import 'package:go_router/go_router.dart';
 import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
+import '../core/brewing_logic.dart';
 
-class FinalEvaluationScreen extends ConsumerWidget {
+class FinalEvaluationScreen extends ConsumerStatefulWidget {
   const FinalEvaluationScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FinalEvaluationScreen> createState() => _FinalEvaluationScreenState();
+}
+
+class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
+  late TextEditingController _notesController;
+
+  // Lista najczęstszych defektów i wad ekstrakcji/wypału
+  final List<String> _commonDefects = [
+    'Astringent', 'Sour (Harsh)', 'Bitter (Harsh)', 
+    'Grassy', 'Woody', 'Baked', 'Papery', 'Baggy'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicjalizacja kontrolera z obecnego stanu pamięci
+    _notesController = TextEditingController(text: ref.read(tastingProvider).notes);
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tastingData = ref.watch(tastingProvider);
     final notifier = ref.read(tastingProvider.notifier);
 
@@ -29,7 +56,7 @@ class FinalEvaluationScreen extends ConsumerWidget {
               ),
             ),
             
-            // Grupowanie suwaków w eleganckiej karcie (Neumorfizm / Surface)
+            // 1. Sekcja Suwaków Sensorycznych
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -68,6 +95,51 @@ class FinalEvaluationScreen extends ConsumerWidget {
             
             const SizedBox(height: 32),
             
+            // 2. Sekcja Defektów (FilterChips)
+            const Padding(
+              padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
+              child: Text(
+                'SCA DEFECTS & TAINTS (OPTIONAL)', 
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
+              ),
+            ),
+            
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              color: appSurface,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: _commonDefects.map((defect) {
+                      final isSelected = tastingData.defects.contains(defect);
+                      return FilterChip(
+                        label: Text(defect, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.white70)),
+                        selected: isSelected,
+                        selectedColor: Colors.redAccent.shade700.withValues(alpha: 0.6),
+                        checkmarkColor: Colors.white,
+                        backgroundColor: const Color(0xFF1E1A18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: isSelected ? Colors.redAccent : Colors.white10),
+                        ),
+                        onSelected: (bool selected) {
+                          notifier.toggleDefect(defect);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // 3. Ocena Ogólna (Enjoyment)
             const Padding(
               padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
               child: Text(
@@ -87,35 +159,113 @@ class FinalEvaluationScreen extends ConsumerWidget {
                   value: tastingData.enjoyment,
                   min: 1,
                   max: 5,
-                  divisions: 40, // Skok co 0.1 w skali 1-5
-                  accentColor: Colors.amber, // Wyróżnienie oceny końcowej kolorem złotym
+                  divisions: 40,
+                  accentColor: Colors.amber,
                   onChanged: (val) => notifier.updateEnjoyment(val),
                 ),
               ),
             ),
             
+            const SizedBox(height: 32),
+
+            // 4. Wolne Notatki
+            const Padding(
+              padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
+              child: Text(
+                'BREWING NOTES', 
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
+              ),
+            ),
+
+            TextField(
+              controller: _notesController,
+              maxLines: 4,
+              onChanged: (val) => notifier.updateNotes(val),
+              decoration: InputDecoration(
+                hintText: 'e.g. Drawdown was 15s too fast. Next time try 2 clicks finer...',
+                hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic),
+                filled: true,
+                fillColor: appSurface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.green.shade700),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 40),
             
             PrimaryActionButton(
               label: 'SAVE SESSION',
-              color: Colors.green.shade700, // Sygnał akcji afirmatywnej (zapis)
+              color: Colors.green.shade700,
               onPressed: () async {
+                final currentState = ref.read(tastingProvider);
+                
+                final advice = BrewingAssistant.getAdvice(
+                  sweetness: currentState.sweetness,
+                  acidity: currentState.acidity,
+                  bitterness: currentState.bitterness,
+                  enjoyment: currentState.enjoyment,
+                );
+
                 await notifier.saveSession();
                 ref.invalidate(historyProvider);
-            
+
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('Sesja została pomyślnie zapisana!', style: TextStyle(fontWeight: FontWeight.bold)),
-                      backgroundColor: Colors.green.shade800,
                       behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    )
+                      margin: const EdgeInsets.all(16),
+                      backgroundColor: const Color(0xFF1E1A18),
+                      duration: const Duration(seconds: 5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.green.shade700, width: 1.5),
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Session saved!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Divider(color: Colors.white24, height: 1),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.psychology_outlined, color: Colors.amber, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Next brew: $advice',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontStyle: FontStyle.italic, height: 1.3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                   context.go('/');
                 }
               },
-            ), 
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -148,12 +298,12 @@ class PremiumTasteSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // [Wklej swój dotychczasowy kod klasy PremiumTasteSlider bez żadnych zmian]
     final activeColor = accentColor ?? appPrimary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Górny wiersz: Etykieta oraz dokładny odczyt liczbowy (rozwiązanie Thumb Occlusion)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -177,8 +327,6 @@ class PremiumTasteSlider extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        
-        // Nadpisanie motywu suwaka dla tego konkretnego widgetu (grubsza linia, większy uchwyt)
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 8.0,
@@ -189,7 +337,6 @@ class PremiumTasteSlider extends StatelessWidget {
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12.0, elevation: 4),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 24.0),
             trackShape: const RoundedRectSliderTrackShape(),
-            // Wyłączamy domyślną "chmurkę" z wartością, bo mamy własny czytelny wskaźnik wyżej
             showValueIndicator: ShowValueIndicator.never, 
           ),
           child: Slider(

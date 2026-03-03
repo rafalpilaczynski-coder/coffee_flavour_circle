@@ -24,24 +24,28 @@ const Map<String, List<String>> aromaCategories = {
   'Floral': ['Jasmine', 'Rose', 'Black Tea'],
 };
 
-const List<Map<String, dynamic>> mainFlavorCategories = [
-  {'name': 'FRUITY', 'color': Color(0xFFE22D30)},
-  {'name': 'SWEET', 'color': Color(0xFFE87123)},
-  {'name': 'NUTTY/COCOA', 'color': Color(0xFF905E41)},
-  {'name': 'FLORAL', 'color': Color(0xFFE557A1)},
-  {'name': 'SPICES', 'color': Color(0xFFAD2226)},
-  {'name': 'ROASTED', 'color': Color(0xFFC08953)},
-  {'name': 'GREEN/VEGETAL', 'color': Color(0xFF197A3E)},
-  {'name': 'SOUR/FERMENTED', 'color': Color(0xFFE2B026)},
+// lib/core/constants.dart
+
+final List<Map<String, dynamic>> mainFlavorCategories = [
+  {'name': 'FRUITY', 'color': const Color(0xFFDD0033), 'icon': 'assets/images/flavors/fruity.png'},
+  {'name': 'SOUR/FERMENTED', 'color': const Color(0xFFEDC800), 'icon': 'assets/images/flavors/sour.png'},
+  {'name': 'GREEN/VEGETATIVE', 'color': const Color(0xFF107A3B), 'icon': 'assets/images/flavors/green.png'},
+  {'name': 'OTHER', 'color': const Color(0xFF129CB6), 'icon': 'assets/images/flavors/other.png'},
+  {'name': 'ROASTED', 'color': const Color(0xFFC24F35), 'icon': 'assets/images/flavors/roasted.png'},
+  {'name': 'SPICES', 'color': const Color(0xFFAC1D36), 'icon': 'assets/images/flavors/spices.png'},
+  {'name': 'NUTTY/COCOA', 'color': const Color(0xFFA56C4A), 'icon': 'assets/images/flavors/nutty.png'},
+  {'name': 'SWEET', 'color': const Color(0xFFDE6E5E), 'icon': 'assets/images/flavors/sweet.png'},
+  {'name': 'FLORAL', 'color': const Color(0xFFD01968), 'icon': 'assets/images/flavors/floral.png'},
 ];
 
-const Map<String, Map<String, dynamic>> flavorTree = {
-  'FRUITY': {'color': Color(0xFFE22D30), 'sub': ['Berry', 'Citrus', 'Stone Fruit', 'Apple']},
-  'SWEET': {'color': Color(0xFFE87123), 'sub': ['Chocolate', 'Caramel', 'Brown Sugar', 'Vanilla', 'Honey']},
-  'NUTTY/COCOA': {'color': Color(0xFF905E41), 'sub': ['Peanut', 'Hazelnut', 'Almond', 'Dark Choc']},
-  'FLORAL': {'color': Color(0xFFE557A1), 'sub': ['Jasmine', 'Rose', 'Chamomile', 'Black Tea']},
-  'SPICES': {'color': Color(0xFFAD2226), 'sub': ['Cinnamon', 'Clove', 'Nutmeg', 'Pepper']},
-  'ROASTED': {'color': Color(0xFFC08953), 'sub': ['Tobacco', 'Pipe', 'Burnt', 'Cereal']},
-  'GREEN/VEGETAL': {'color': Color(0xFF197A3E), 'sub': ['Olive', 'Undergrowth', 'Peas', 'Hay']},
-  'SOUR/FERMENTED': {'color': Color(0xFFE2B026), 'sub': ['Winey', 'Whiskey', 'Fermented', 'Balsamic']},
+final Map<String, Map<String, dynamic>> flavorTree = {
+  'FRUITY': {'color': const Color(0xFFDD0033), 'sub': ['Berry', 'Dried fruit', 'Other fruit', 'Citrus fruit']},
+  'SOUR/FERMENTED': {'color': const Color(0xFFEDC800), 'sub': ['Sour', 'Alcohol/Fermented']},
+  'GREEN/VEGETATIVE': {'color': const Color(0xFF107A3B), 'sub': ['Olive oil', 'Raw', 'Green/Vegetative', 'Beany']},
+  'OTHER': {'color': const Color(0xFF129CB6), 'sub': ['Papery/Musty', 'Chemical']},
+  'ROASTED': {'color': const Color(0xFFC24F35), 'sub': ['Pipe tobacco', 'Tobacco', 'Burnt', 'Cereal']},
+  'SPICES': {'color': const Color(0xFFAC1D36), 'sub': ['Pungent', 'Pepper', 'Brown spice']},
+  'NUTTY/COCOA': {'color': const Color(0xFFA56C4A), 'sub': ['Nutty', 'Cocoa']},
+  'SWEET': {'color': const Color(0xFFDE6E5E), 'sub': ['Brown sugar', 'Vanilla', 'Vanillin', 'Overall sweet', 'Sweet aromatics']},
+  'FLORAL': {'color': const Color(0xFFD01968), 'sub': ['Black Tea', 'Floral']},
 };

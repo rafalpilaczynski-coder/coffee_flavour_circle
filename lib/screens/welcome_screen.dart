@@ -13,13 +13,14 @@ class WelcomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'COFFEE FLAVOUR CIRCLE', 
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)
+           Image.asset(
+            'assets/images/logo.png',
+            height: 160, // Rozmiar optymalny dla proporcji ekranu
+            fit: BoxFit.contain,
             ),
             const SizedBox(height: 50),
             
-            // Użycie naszego nowego, uniwersalnego komponentu!
+            // 1. Akcja główna (Primary)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40.0),
               child: PrimaryActionButton(
@@ -30,7 +31,7 @@ class WelcomeScreen extends StatelessWidget {
             
             const SizedBox(height: 10),
             
-            // Przycisk historii
+            // 2. Akcja poboczna (Secondary)
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -40,6 +41,25 @@ class WelcomeScreen extends StatelessWidget {
                   icon: const Icon(Icons.history),
                   label: const Text('VIEW HISTORY', style: TextStyle(fontWeight: FontWeight.bold)),
                   onPressed: () => context.go('/history'),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // 3. Ustawienia personalne (Tertiary)
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: TextButton.icon(
+                  icon: const Icon(Icons.tune, size: 20), // Ikona suwaków (inżynieryjny vibe)
+                  label: const Text('PERSONAL SETTINGS', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFC27D56), // Nasz miedziany akcent
+                  ),
+                  onPressed: () => context.go('/settings'),
                 ),
               ),
             ),

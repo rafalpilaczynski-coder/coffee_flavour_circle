@@ -11,6 +11,7 @@ import 'screens/fragrance_notes_screen.dart';
 import 'screens/flavor_wheel_screen.dart';
 import 'screens/final_evaluation_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/personal_settings_screen.dart';
 
 void main() {
   runApp(
@@ -29,6 +30,7 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/wheel', builder: (context, state) => const FlavorWheelScreen()),
     GoRoute(path: '/evaluation', builder: (context, state) => const FinalEvaluationScreen()),
     GoRoute(path: '/history', builder: (context, state) => const HistoryScreen()),
+    GoRoute(path: '/settings',builder: (context, state) => const PersonalSettingsScreen()),
   ],
 );
 

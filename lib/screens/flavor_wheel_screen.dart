@@ -1,5 +1,7 @@
 // lib/screens/flavor_wheel_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Wymagane do ładowania obrazków
+import 'dart:ui' as ui; // Wymagane do ui.Image
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
@@ -20,15 +22,46 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
   WheelPhase _currentPhase = WheelPhase.primaryMain;
   String? _tempMainSelection;
   int? _tempMainIndex;
-  
-  // NOWE: Pamięć wektora kliknięcia dla animacji kinematycznej
   Alignment _tapAlignment = Alignment.center;
+  
+  // Bufor dla asynchronicznie załadowanych obrazków
+  final Map<String, ui.Image> _loadedIcons = {};
+  bool _iconsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllIcons();
+  }
+
+  // Funkcja ładująca obrazki z Assetów na surowe dane ui.Image dla Canvasa
+Future<void> _loadAllIcons() async {
+    for (var cat in mainFlavorCategories) {
+      if (cat.containsKey('icon')) {
+        final path = cat['icon'] as String;
+        try {
+          final ByteData data = await rootBundle.load(path);
+          // Skalujemy ikony wymuszając rozmiar 40x40 pikseli (żeby idealnie zmieściły się w kole tła)
+          final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: 18, targetHeight: 18);
+          final ui.FrameInfo fi = await codec.getNextFrame();
+          _loadedIcons[path] = fi.image;
+          debugPrint('SUCCESS loaded: $path'); // Potwierdzenie sukcesu
+        } catch (e) {
+          debugPrint('CRITICAL ERROR loading icon: $path | Zwróć uwagę na literówki w nazwie pliku lub brak rozszerzenia!');
+        }
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _iconsLoaded = true;
+      });
+    }
+  }
 
   void _handleSegmentTap(String categoryName, int index, Alignment tapOrigin) {
     final notifier = ref.read(tastingProvider.notifier);
 
     setState(() {
-      // Zapisujemy wektor kliknięcia, aby animacja wiedziała, skąd wystartować
       _tapAlignment = tapOrigin;
 
       switch (_currentPhase) {
@@ -66,35 +99,47 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
       _currentPhase = WheelPhase.primaryMain;
       _tempMainSelection = null;
       _tempMainIndex = null;
-      _tapAlignment = Alignment.center; // Resetujemy wektor do środka
+      _tapAlignment = Alignment.center;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Zapobiegamy renderowaniu koła, dopóki ikony nie są wczytane z dysku do pamięci
+    if (!_iconsLoaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final tastingData = ref.watch(tastingProvider);
     
     List<Map<String, dynamic>> activeCategories = [];
     double baseStartAngle = -math.pi / 2;
     double totalSweepAngle = 2 * math.pi;
 
-   if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
+    if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
       activeCategories = mainFlavorCategories; 
-    } else if (_tempMainSelection != null && _tempMainIndex != null) {
-      final parentColor = flavorTree[_tempMainSelection]!['color'] as Color;
-      final subList = List<String>.from(flavorTree[_tempMainSelection]!['sub']);
+} else if (_tempMainSelection != null && _tempMainIndex != null) {
+      final treeNode = flavorTree[_tempMainSelection];
+      
+      // DIAGNOSTYKA: Jawny komunikat błędu zamiast cichego resetu
+if (treeNode == null) {
+        // Miękki reset (Graceful Degradation) zamiast błędu krytycznego
+        WidgetsBinding.instance.addPostFrameCallback((_) => _resetWheel());
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+
+      final parentColor = treeNode['color'] as Color;
+      final subList = List<String>.from(treeNode['sub']);
       
       subList.insert(0, 'Overall\n$_tempMainSelection'); 
 
       activeCategories = subList.map((subName) => {'name': subName, 'color': parentColor}).toList();
       
-      // INŻYNIERIA KINEMATYCZNA: Obliczamy środek oryginalnego wycinka
       double parentSweepAngle = (2 * math.pi) / mainFlavorCategories.length;
       double parentMiddleAngle = -math.pi / 2 + (_tempMainIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
-      // Zamiast trzymać się 45 stopni, rozkładamy "wachlarz" na 160 stopni dla czytelności
-      totalSweepAngle = 160 * (math.pi / 180); // Konwersja 160 stopni na radiany
-      baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2); // Centrowanie wachlarza
+      totalSweepAngle = 160 * (math.pi / 180);
+      baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
     }
 
     return Scaffold(
@@ -116,15 +161,14 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                   child: Center(child: Icon(Icons.check_circle, size: 100, color: Colors.green))
                 )
               : AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 550), // Wydłużony czas dla płynności
-                  switchInCurve: Curves.easeOutBack, // Fizyczne "odbicie" (overshoot) na końcu
+                  duration: const Duration(milliseconds: 550),
+                  switchInCurve: Curves.easeOutBack,
                   switchOutCurve: Curves.easeInCubic,
                   transitionBuilder: (Widget child, Animation<double> animation) {
                     return FadeTransition(
                       opacity: animation,
                       child: ScaleTransition(
                         scale: Tween<double>(begin: 0.2, end: 1.0).animate(animation),
-                        // UŻYCIE WEKTORA: Animacja skalowania zaczyna się od klikniętego punktu
                         alignment: _tapAlignment,
                         child: child,
                       ),
@@ -147,11 +191,9 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                         int index = (relativeAngle / totalSweepAngle * activeCategories.length).floor();
                         if (index == activeCategories.length) index--; 
                         
-                        // OBLICZANIE WEKTORA KINEMATYCZNEGO
                         double segmentSweep = totalSweepAngle / activeCategories.length;
                         double segmentMiddleAngle = baseStartAngle + (index * segmentSweep) + (segmentSweep / 2);
                         
-                        // Mapowanie biegunowe na płaszczyznę kartezjańską Alignment (-1 do 1)
                         Alignment tapAlign = Alignment(math.cos(segmentMiddleAngle), math.sin(segmentMiddleAngle));
 
                         _handleSegmentTap(activeCategories[index]['name'], index, tapAlign);
@@ -163,6 +205,8 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                         categories: activeCategories,
                         baseStartAngle: baseStartAngle,
                         totalSweepAngle: totalSweepAngle,
+                        loadedIcons: _loadedIcons, // <--- Przekazujemy załadowane ikony
+                        isInnerWheel: (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain)
                       ),
                     ),
                   ),
@@ -170,26 +214,28 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           ),
           
           const Spacer(),
-          if (tastingData.primaryFlavorMain != null)
+          // Sprawdzamy, czy string nie jest pusty
+          if (tastingData.primaryFlavorMain.isNotEmpty) 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Card(
                 color: Colors.blueGrey.withValues(alpha: 0.3),
                 child: ListTile(
                   title: const Text('Primary Flavor'),
-                  subtitle: Text('${tastingData.primaryFlavorMain} ➔ ${tastingData.primaryFlavorSub ?? '...'}'),
+                  subtitle: Text('${tastingData.primaryFlavorMain} ➔ ${tastingData.primaryFlavorSub}'),
                   leading: const Icon(Icons.star, color: Colors.amber),
                 ),
               ),
             ),
-          if (tastingData.secondaryFlavorMain != null)
+          
+          if (tastingData.secondaryFlavorMain.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Card(
                 color: Colors.blueGrey.withValues(alpha: 0.3),
                 child: ListTile(
                   title: const Text('Secondary Flavor'),
-                  subtitle: Text('${tastingData.secondaryFlavorMain} ➔ ${tastingData.secondaryFlavorSub ?? '...'}'),
+                  subtitle: Text('${tastingData.secondaryFlavorMain} ➔ ${tastingData.secondaryFlavorSub}'),
                   leading: const Icon(Icons.star_half, color: Colors.amberAccent),
                 ),
               ),
@@ -212,8 +258,16 @@ class WheelPainter extends CustomPainter {
   final List<Map<String, dynamic>> categories;
   final double baseStartAngle;
   final double totalSweepAngle;
+  final Map<String, ui.Image> loadedIcons;
+  final bool isInnerWheel;
 
-  WheelPainter({required this.categories, required this.baseStartAngle, required this.totalSweepAngle});
+  WheelPainter({
+    required this.categories, 
+    required this.baseStartAngle, 
+    required this.totalSweepAngle,
+    required this.loadedIcons,
+    required this.isInnerWheel,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -227,27 +281,62 @@ class WheelPainter extends CustomPainter {
     double currentAngle = baseStartAngle;
 
     for (var cat in categories) {
+      // Rysowanie wycinka koła
       final paint = Paint()
         ..color = cat['color']
         ..style = PaintingStyle.fill;
       canvas.drawArc(rect, currentAngle, sweepAngle, true, paint);
       
+      // Rysowanie krawędzi
       final borderPaint = Paint()
         ..color = Colors.black.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2;
       canvas.drawArc(rect, currentAngle, sweepAngle, true, borderPaint);
 
-      _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name']);
+      // Renderowanie logiki zawartości
+      if (isInnerWheel && cat.containsKey('icon') && loadedIcons.containsKey(cat['icon'])) {
+         // 1. Rysujemy czarną ikonę (przesuniętą bliżej krawędzi: promień 0.78)
+         _drawBlackIcon(canvas, center, radius, currentAngle, sweepAngle, loadedIcons[cat['icon']]!);
+         // 2. Rysujemy tekst pod ikoną (przesunięty bliżej środka: promień 0.52)
+         _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], 0.52);
+      } else {
+         // Dla koła zewnętrznego (lub braku ikon) rysujemy sam tekst na środku wycinka (promień 0.65)
+         _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], 0.65);
+      }
+
       currentAngle += sweepAngle;
     }
 
+    // Środek koła
     canvas.drawCircle(center, radius * 0.3, Paint()..color = const Color(0xFF121212));
   }
 
-  void _drawText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text) {
+  void _drawBlackIcon(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, ui.Image image) {
+    final double midAngle = startAngle + (sweepAngle / 2);
+    final double iconRadius = radius * 0.78; // Odsunięcie od środka (bliżej zewnętrznej krawędzi)
+    
+    final double imgX = center.dx + iconRadius * math.cos(midAngle);
+    final double imgY = center.dy + iconRadius * math.sin(midAngle);
+
+    canvas.save();
+    canvas.translate(imgX, imgY);
+    
+    double rotation = midAngle + math.pi / 2;
+    canvas.rotate(rotation);
+
+    // INŻYNIERIA KONTRASTU: Filtr zmieniający każdy piksel obrazu na idealną czerń
+    final paint = Paint()
+      ..colorFilter = const ColorFilter.mode(Colors.black, BlendMode.srcIn);
+
+    canvas.drawImage(image, Offset(-image.width / 2, -image.height / 2), paint);
+    
+    canvas.restore();
+  }
+
+  void _drawText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text, double radiusMultiplier) {
     final double textAngle = startAngle + (sweepAngle / 2);
-    final double textRadius = radius * 0.65; 
+    final double textRadius = radius * radiusMultiplier; // Dynamiczny promień
     
     final double textX = center.dx + textRadius * math.cos(textAngle);
     final double textY = center.dy + textRadius * math.sin(textAngle);
@@ -268,7 +357,7 @@ class WheelPainter extends CustomPainter {
         color: Colors.white, 
         fontSize: 10, 
         fontWeight: FontWeight.bold,
-        height: 1.1, // Zmniejszenie odstępu między wierszami
+        height: 1.1,
         shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
       ),
     );
@@ -280,6 +369,8 @@ class WheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant WheelPainter oldDelegate) {
-    return oldDelegate.categories != categories || oldDelegate.baseStartAngle != baseStartAngle;
+    return oldDelegate.categories != categories || 
+           oldDelegate.baseStartAngle != baseStartAngle ||
+           oldDelegate.loadedIcons.length != loadedIcons.length;
   }
 }

@@ -1,273 +1,194 @@
-// lib/screens/history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart'; // Dodaj intl do pubspec.yaml dla formatowania dat
 import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
-import '../shared/taste_radar_chart.dart';
-import '../core/brewing_logic.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
-  // Pomocnicza funkcja inżynieryjna: Mapowanie nazwy smaku na fizyczny kolor ze stałych
-  Color _getFlavorColor(String flavorName) {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(historyProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Brewing History'), centerTitle: true),
+      body: historyAsync.when(
+        data: (sessions) => sessions.isEmpty
+            ? const Center(child: Text('No sessions recorded yet.', style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: sessions.length,
+                itemBuilder: (context, index) => HistoryItemCard(session: sessions[index]),
+              ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+      ),
+    );
+  }
+}
+
+class HistoryItemCard extends StatelessWidget {
+  final Map<String, dynamic> session;
+  const HistoryItemCard({super.key, required this.session});
+
+  // Pomocnicza funkcja do znajdowania ikony dla kategorii
+  String? _getIconPath(String category) {
     try {
-      final category = mainFlavorCategories.firstWhere(
-        (cat) => cat['name'] == flavorName,
-        orElse: () => {'color': Colors.grey},
-      );
-      return category['color'] as Color;
-    } catch (e) {
-      return Colors.grey;
+      return mainFlavorCategories.firstWhere((c) => c['name'] == category)['icon'];
+    } catch (_) {
+      return null;
     }
   }
-  Widget _buildFlavorRow(String main, String sub) {
-    return Row(
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime date = DateTime.parse(session['timestamp']);
+    final String coffeeName = session['coffeeName'] ?? 'Unknown Coffee';
+    final List<dynamic> defects = session['defects'] ?? [];
+    final List<dynamic> dryNotes = session['dryNotes'] ?? [];
+    final List<dynamic> wetNotes = session['wetNotes'] ?? [];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        backgroundColor: const Color(0xFF1E1A18),
+        collapsedBackgroundColor: const Color(0xFF1E1A18),
+        title: Text(coffeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        subtitle: Text(DateFormat('yyyy-MM-dd | HH:mm').format(date), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        trailing: _buildRatingBadge(session['enjoyment'] ?? 0.0),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. PARAMETRY FIZYCZNE
+                _buildSectionHeader('BREW SPECS'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildMiniInfo(Icons.water_drop, '${session['waterVolume']}ml'),
+                    _buildMiniInfo(Icons.scale, '${session['dose']}g'),
+                    _buildMiniInfo(Icons.thermostat, '${session['temperature']}°C'),
+                    _buildMiniInfo(Icons.settings, session['grinderSetting'] ?? '-'),
+                  ],
+                ),
+                const Divider(height: 32, color: Colors.white10),
+
+                // 2. FRAGRANCE & AROMA (TAGI)
+                if (dryNotes.isNotEmpty || wetNotes.isNotEmpty) ...[
+                  _buildSectionHeader('FRAGRANCE / AROMA'),
+                  _buildTagWrap('Dry: ', dryNotes, Colors.amber.withValues(alpha: 0.2)),
+                  const SizedBox(height: 8),
+                  _buildTagWrap('Wet: ', wetNotes, Colors.blue.withValues(alpha: 0.2)),
+                  const Divider(height: 32, color: Colors.white10),
+                ],
+
+                // 3. PROFIL SMAKOWY (Z IKONAMI)
+                _buildSectionHeader('FLAVOR PROFILE'),
+                _buildFlavorRow(session['primaryFlavorMain'], session['primaryFlavorSub'], isPrimary: true),
+                const SizedBox(height: 8),
+                _buildFlavorRow(session['secondaryFlavorMain'], session['secondaryFlavorSub']),
+                const Divider(height: 32, color: Colors.white10),
+
+                // 4. DEFEKTY (JEŚLI SĄ)
+                if (defects.isNotEmpty) ...[
+                  _buildSectionHeader('SCA DEFECTS'),
+                  Wrap(
+                    spacing: 8,
+                    children: defects.map((d) => Chip(
+                      label: Text(d, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                      backgroundColor: Colors.redAccent.withValues(alpha: 0.4),
+                      visualDensity: VisualDensity.compact,
+                    )).toList(),
+                  ),
+                  const Divider(height: 32, color: Colors.white10),
+                ],
+
+                // 5. NOTATKI
+                if (session['notes']?.toString().isNotEmpty ?? false) ...[
+                  _buildSectionHeader('NOTES'),
+                  Text(
+                    session['notes'],
+                    style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.white70, fontSize: 13),
+                  ),
+                ],
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+    );
+  }
+
+  Widget _buildMiniInfo(IconData icon, String value) {
+    return Column(
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _getFlavorColor(main),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '$main ${sub.isNotEmpty ? "➔ $sub" : ""}',
-            style: const TextStyle(fontSize: 13, color: appTextPrimary),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        Icon(icon, size: 16, color: Colors.white54),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     );
   }
 
+  Widget _buildTagWrap(String label, List<dynamic> tags, Color color) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        ...tags.map((t) => Padding(
+          padding: const EdgeInsets.only(right: 4.0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+            child: Text(t, style: const TextStyle(fontSize: 10)),
+          ),
+        )),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final historyAsyncValue = ref.watch(historyProvider);
+  Widget _buildFlavorRow(String? main, String? sub, {bool isPrimary = false}) {
+    if (main == null || main.isEmpty) return const SizedBox.shrink();
+    final iconPath = _getIconPath(main);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tasting History'), 
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
-        ),
-      ),
-      body: historyAsyncValue.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: appPrimary)),
-        error: (error, stack) => Center(child: Text('Błąd odczytu: $error', style: const TextStyle(color: Colors.redAccent))),
-        data: (sessions) {
-          if (sessions.isEmpty) {
-            return const Center(
-              child: Text(
-                'Brak zapisanych sesji.\nCzas zaparzyć pierwszą kawę!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: appTextSecondary, fontSize: 16),
-              ),
-            );
-          }
+    return Row(
+      children: [
+        if (iconPath != null)
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+            child: Image.asset(iconPath, width: 14, height: 14, color: Colors.black),
+          ),
+        const SizedBox(width: 8),
+        Text(main, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        const Icon(Icons.chevron_right, size: 14, color: Colors.grey),
+        Text(sub ?? 'Overall', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+      ],
+    );
+  }
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: sessions.length,
-            itemBuilder: (context, index) {
-              final session = sessions[index];
-              
-              // 1. Ekstrakcja i formatowanie podstawowych danych
-              final dateString = session['timestamp'] as String;
-              final date = DateTime.parse(dateString).toLocal();
-              final formattedDate = '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
-              
-              final coffeeName = session['coffeeName']?.toString().isNotEmpty == true 
-                  ? session['coffeeName'] 
-                  : 'Kawa nieznana';
-              final method = session['method'] ?? 'V60';
-              final score = (session['enjoyment'] as num?)?.toDouble() ?? 0.0;
-              
-              // 2. Ekstrakcja wektorów smaku dla Spider Charta
-              final sweetness = (session['sweetness'] as num?)?.toDouble() ?? 5.0;
-              final acidity = (session['acidity'] as num?)?.toDouble() ?? 5.0;
-              final bitterness = (session['bitterness'] as num?)?.toDouble() ?? 5.0;
-
-              // 3. Analiza przez Asystenta Korekty
-              final suggestion = BrewingAssistant.getSuggestion(
-                sweetness: sweetness,
-                acidity: acidity,
-                bitterness: bitterness,
-                enjoyment: score,
-              );
-              
-              // 4. Ekstrakcja profilu smakowego
-              final primaryMain = session['primaryFlavorMain'] ?? 'Brak';
-              final primarySub = session['primaryFlavorSub'] ?? '';
-              final secondaryMain = session['secondaryFlavorMain'];
-              final secondarySub = session['secondaryFlavorSub'] ?? '';
-
-              final uniqueKey = Key(session['timestamp'] as String);
-
-              // Kolorystyka oceny
-              Color scoreColor = score >= 4.0 
-                  ? Colors.green.shade500 
-                  : (score >= 3.0 ? Colors.amber.shade500 : Colors.redAccent.shade400);
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Dismissible(
-                  key: uniqueKey,
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 24.0),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.shade700,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(Icons.delete_outline, color: Colors.white, size: 32),
-                  ),
-                  onDismissed: (direction) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    final savedSessions = prefs.getStringList('coffee_sessions_history') ?? [];
-                    final originalIndex = savedSessions.length - 1 - index;
-
-                    if (originalIndex >= 0 && originalIndex < savedSessions.length) {
-                      savedSessions.removeAt(originalIndex);
-                      await prefs.setStringList('coffee_sessions_history', savedSessions);
-                    }
-                    ref.invalidate(historyProvider);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: appSurface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // KOLUMNA LEWA: Wizualizacja (Radar + Wynik)
-                              Column(
-                                children: [
-                                  TasteRadarChart(
-                                    sweetness: sweetness,
-                                    acidity: acidity,
-                                    bitterness: bitterness,
-                                    size: 80,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    score.toStringAsFixed(1),
-                                    style: TextStyle(
-                                      color: scoreColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              
-                              // KOLUMNA PRAWA: Dane tekstowe
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            '$coffeeName',
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: appTextPrimary),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Text(formattedDate, style: const TextStyle(fontSize: 12, color: appTextSecondary)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    
-                                    // Tag metody
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: appPrimary.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        method,
-                                        style: const TextStyle(fontSize: 10, color: appPrimary, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    
-                                    // Profile smakowe z kolorowymi kropkami
-                                    if (primaryMain != 'Brak') 
-                                      _buildFlavorRow(primaryMain, primarySub),
-                                    
-                                    if (secondaryMain != null) 
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4.0),
-                                        child: _buildFlavorRow(secondaryMain, secondarySub),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          // SEKCJA DOLNA: Asystent (tylko jeśli wynik < 4.0)
-                          if (score < 4.0) ...[
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8.0),
-                              child: Divider(color: Colors.white10, height: 1),
-                            ),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.auto_fix_high, size: 14, color: Colors.amber),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    suggestion,
-                                    style: TextStyle(
-                                      fontSize: 11, 
-                                      color: Colors.amber.withValues(alpha: 0.9), 
-                                      fontStyle: FontStyle.italic,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+  Widget _buildRatingBadge(double enjoyment) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star, color: Colors.amber, size: 14),
+          const SizedBox(width: 4),
+          Text(enjoyment.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
+        ],
       ),
     );
   }
