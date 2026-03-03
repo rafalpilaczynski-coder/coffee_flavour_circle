@@ -54,6 +54,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   gh_pages: ^0.1.1
+  flutter_native_splash: ^2.4.0   # <--- DODAJ TO
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -98,9 +99,20 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: true
-  image_path: "assets/images/logo.png"
-  min_sdk_android: 21
+  android: "launcher_icon" # Automatycznie wygeneruje ikony Androida
+  ios: true # Wygeneruje ikony iOS
+  image_path: "assets/images/logo.png" # Ścieżka do Twojego logo
   web:
-    generate: true
+    generate: true # Wygeneruje favicon oraz manifest dla wersji Web
+    image_path: "assets/images/logo.png"
+    background_color: "#14110f" # Tło dla ikony Web
+    theme_color: "#c27d56" # Miedziany kolor motywu
+
+
+flutter_native_splash:
+  color: "#14110f" # Nasze ciemne appBackground
+  image: assets/images/logo.png # Logo na środku splash screena
+  android_12:
+    image: assets/images/logo.png # Wsparcie dla API 31+
+    color: "#14110f" # Kolor tła
+  web: false # Na web splash screeny działają inaczej, na razie pomińmy
