@@ -46,6 +46,6 @@ final Map<String, Map<String, dynamic>> flavorTree = {
   'ROASTED': {'color': const Color(0xFFC24F35), 'sub': ['Pipe tobacco', 'Tobacco', 'Burnt', 'Cereal']},
   'SPICES': {'color': const Color(0xFFAC1D36), 'sub': ['Pungent', 'Pepper', 'Brown spice']},
   'NUTTY/COCOA': {'color': const Color(0xFFA56C4A), 'sub': ['Nutty', 'Cocoa']},
-  'SWEET': {'color': const Color(0xFFDE6E5E), 'sub': ['Brown sugar', 'Vanilla', 'Vanillin', 'Overall sweet', 'Sweet aromatics']},
+  'SWEET': {'color': const Color(0xFFDE6E5E), 'sub': ['Brown sugar', 'Vanilla', 'Vanillin', 'Sweet aromatics']},
   'FLORAL': {'color': const Color(0xFFD01968), 'sub': ['Black Tea', 'Floral']},
 };

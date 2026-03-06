@@ -1,0 +1,37 @@
+name: Deploy Flutter Web to GitHub Pages
+
+# 1. Definicja wyzwalacza: Skrypt uruchamia się tylko po wypchnięciu do głównej gałęzi
+on:
+  push:
+    branches:
+      - main # Jeśli Twoja główna gałąź nazywa się 'master', zmień to słowo na 'master'
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest # Maszyna wirtualna z systemem Linux
+
+    steps:
+      # Krok 1: Pobranie Twojego kodu źródłowego
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Krok 2: Instalacja środowiska Flutter w chmurze
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # Krok 3: Pobranie zależności (paczek)
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # Krok 4: Zbudowanie zoptymalizowanej wersji Web
+      - name: Build Web
+        run: flutter build web --base-href "/coffee_flavour_circle/" --release
+
+      # Krok 5: Automatyczne wysłanie folderu build/web na gałąź gh-pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web

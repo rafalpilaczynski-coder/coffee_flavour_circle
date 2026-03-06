@@ -17,16 +17,14 @@ class FinalEvaluationScreen extends ConsumerStatefulWidget {
 class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
   late TextEditingController _notesController;
 
-  // Lista najczęstszych defektów i wad ekstrakcji/wypału
+  // Lista najczęstszych defektów (SCA)
   final List<String> _commonDefects = [
-    'Astringent', 'Sour (Harsh)', 'Bitter (Harsh)', 
-    'Grassy', 'Woody', 'Baked', 'Papery', 'Baggy'
+    'Taint', 'Fault', 'Sour', 'Quaker', 'Astringent', 'Woody', 'Papery', 'Musty'
   ];
 
   @override
   void initState() {
     super.initState();
-    // Inicjalizacja kontrolera z obecnego stanu pamięci
     _notesController = TextEditingController(text: ref.read(tastingProvider).notes);
   }
 
@@ -48,15 +46,15 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. SMAKI PODSTAWOWE (Skala 1-5)
             const Padding(
               padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
               child: Text(
-                'SENSORY PROFILE', 
+                'BASIC TASTES', 
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
               ),
             ),
             
-            // 1. Sekcja Suwaków Sensorycznych
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -65,28 +63,82 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
                 child: Column(
                   children: [
-                    PremiumTasteSlider(
+                    RelativeTasteSlider(
                       label: "Sweetness",
                       value: tastingData.sweetness,
-                      min: 0,
-                      max: 10,
                       onChanged: (val) => notifier.updateSweetness(val),
+                      leftLabel: 'low sweetness',
+                      centerLabel: 'moderate sweetness',
+                      rightLabel: 'high sweetness',
+                      activeColor: Colors.pinkAccent,
                     ),
-                    const SizedBox(height: 20),
-                    PremiumTasteSlider(
+                    const SizedBox(height: 32),
+                    RelativeTasteSlider(
                       label: "Acidity",
                       value: tastingData.acidity,
-                      min: 0,
-                      max: 10,
                       onChanged: (val) => notifier.updateAcidity(val),
+                      leftLabel: 'low acidity',
+                      centerLabel: 'moderate acidity',
+                      rightLabel: 'high acidity',
+                      activeColor: Colors.lightGreenAccent,
                     ),
-                    const SizedBox(height: 20),
-                    PremiumTasteSlider(
+                    const SizedBox(height: 32),
+                    RelativeTasteSlider(
                       label: "Bitterness",
                       value: tastingData.bitterness,
-                      min: 0,
-                      max: 10,
                       onChanged: (val) => notifier.updateBitterness(val),
+                      leftLabel: 'low bitterness',
+                      centerLabel: 'moderate bitterness',
+                      rightLabel: 'high bitterness',
+                      activeColor: Colors.brown[300]!,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+
+            // 2. OVERALL ENJOYMENT (Skala 1.0 - 5.0, skok 0.25)
+            const Padding(
+              padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
+              child: Text(
+                'OVERALL ENJOYMENT', 
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
+              ),
+            ),
+
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              color: appSurface,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
+                child: Column(
+                  children: [
+                    Text(
+                      tastingData.enjoyment.toStringAsFixed(2),
+                      style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.amber),
+                    ),
+                    const SizedBox(height: 8),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.amber,
+                        inactiveTrackColor: Colors.black26,
+                        thumbColor: Colors.amber,
+                        overlayColor: Colors.amber.withValues(alpha: 0.2),
+                        trackHeight: 8.0,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14.0, elevation: 4),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 28.0),
+                        trackShape: const RoundedRectSliderTrackShape(),
+                      ),
+                      child: Slider(
+                        value: tastingData.enjoyment,
+                        min: 1.0,
+                        max: 5.0,
+                        divisions: 16, // Co 0.25
+                        onChanged: (val) => notifier.updateEnjoyment(val),
+                      ),
                     ),
                   ],
                 ),
@@ -95,7 +147,7 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
             
             const SizedBox(height: 32),
             
-            // 2. Sekcja Defektów (FilterChips)
+            // 3. DEFEKTY
             const Padding(
               padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
               child: Text(
@@ -139,35 +191,6 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
 
             const SizedBox(height: 32),
 
-            // 3. Ocena Ogólna (Enjoyment)
-            const Padding(
-              padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
-              child: Text(
-                'OVERALL EXPERIENCE', 
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
-              ),
-            ),
-
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              color: appSurface,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
-                child: PremiumTasteSlider(
-                  label: "Enjoyment",
-                  value: tastingData.enjoyment,
-                  min: 1,
-                  max: 5,
-                  divisions: 40,
-                  accentColor: Colors.amber,
-                  onChanged: (val) => notifier.updateEnjoyment(val),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-
             // 4. Wolne Notatki
             const Padding(
               padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
@@ -203,6 +226,7 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
 
             const SizedBox(height: 40),
             
+            // ZAPISZ SESJĘ
             PrimaryActionButton(
               label: 'SAVE SESSION',
               color: Colors.green.shade700,
@@ -274,32 +298,32 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
 }
 
 // ==========================================
-// DEDYKOWANY KOMPONENT: PremiumTasteSlider
+// DEDYKOWANY KOMPONENT: RelativeTasteSlider
 // ==========================================
-class PremiumTasteSlider extends StatelessWidget {
+class RelativeTasteSlider extends StatelessWidget {
   final String label;
   final double value;
-  final double min;
-  final double max;
-  final int divisions;
   final ValueChanged<double> onChanged;
-  final Color? accentColor;
+  final String leftLabel;
+  final String centerLabel;
+  final String rightLabel;
+  final Color activeColor;
 
-  const PremiumTasteSlider({
+  const RelativeTasteSlider({
     super.key,
     required this.label,
     required this.value,
-    required this.min,
-    required this.max,
-    this.divisions = 100,
     required this.onChanged,
-    this.accentColor,
+    required this.leftLabel,
+    required this.centerLabel,
+    required this.rightLabel,
+    required this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    // [Wklej swój dotychczasowy kod klasy PremiumTasteSlider bez żadnych zmian]
-    final activeColor = accentColor ?? appPrimary;
+    // Skala od 1 do 5
+    final safeValue = value.clamp(1.0, 5.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,7 +344,7 @@ class PremiumTasteSlider extends StatelessWidget {
                 border: Border.all(color: activeColor.withValues(alpha: 0.3)),
               ),
               child: Text(
-                value.toStringAsFixed(1),
+                safeValue.toInt().toString(),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: activeColor),
               ),
             ),
@@ -329,22 +353,34 @@ class PremiumTasteSlider extends StatelessWidget {
         const SizedBox(height: 8),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            trackHeight: 8.0,
+            trackHeight: 6.0,
             activeTrackColor: activeColor,
             inactiveTrackColor: Colors.black26,
             thumbColor: activeColor,
             overlayColor: activeColor.withValues(alpha: 0.2),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12.0, elevation: 4),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24.0),
-            trackShape: const RoundedRectSliderTrackShape(),
-            showValueIndicator: ShowValueIndicator.never, 
+            tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 3),
+            activeTickMarkColor: Colors.white54,
+            inactiveTickMarkColor: Colors.white24,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0, elevation: 4),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 20.0),
           ),
           child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
+            value: safeValue,
+            min: 1.0,
+            max: 5.0,
+            divisions: 4, // 1, 2, 3, 4, 5
             onChanged: onChanged,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(leftLabel, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              Text(centerLabel, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              Text(rightLabel, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
           ),
         ),
       ],

@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
-
+import 'dart:ui' as ui;
+import '../core/constants.dart'; // Upewnij się, że ten import istnieje na górze
 // ==========================================
 // 1. MODEL DANYCH (STAN)
 // ==========================================
@@ -314,4 +315,29 @@ final uniqueGrindersProvider = Provider<List<String>>((ref) {
   
   final sortedList = uniqueGrinders.toList()..sort();
   return sortedList;
+});
+
+final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
+  final Map<String, ui.Image> cache = {};
+
+  for (var cat in mainFlavorCategories) {
+    if (cat.containsKey('icon')) {
+      final path = cat['icon'] as String;
+      try {
+        final ByteData data = await rootBundle.load(path);
+        // Wymuszamy rozmiar 18x18 bezpośrednio w fazie dekodowania
+        final ui.Codec codec = await ui.instantiateImageCodec(
+          data.buffer.asUint8List(), 
+          targetWidth: 18, 
+          targetHeight: 18
+        );
+        final ui.FrameInfo fi = await codec.getNextFrame();
+        cache[path] = fi.image;
+        debugPrint('Cache hit: $path');
+      } catch (e) {
+        debugPrint('Cache miss/error for $path: $e');
+      }
+    }
+  }
+  return cache;
 });

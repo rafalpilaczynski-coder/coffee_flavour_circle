@@ -126,6 +126,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final history = ref.watch(historyProvider).value ?? [];
     String? lastSetting;
     
+    ref.read(iconCacheProvider); // Wymusza rozpoczęcie dekodowania ikon w tle
+
     if (selectedGrinder.isNotEmpty) {
       try {
         final lastSession = history.firstWhere(
@@ -154,18 +156,16 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
         centerTitle: true,
         toolbarHeight: 48,
       ),
-      body: SafeArea(
-        // INŻYNIERIA BŁĘDU: Używamy .when(), aby nie rysować ekranu dopóki JSON nie zostanie wczytany
-        child: asyncRoasteries.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, stack) => Center(child: Text('Błąd ładowania danych: $err')),
-          data: (roasteries) {
-            // Główna zawartość ładuje się dopiero, gdy roasteries są w pełni gotowe
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+        body: SafeArea(
+          child: asyncRoasteries.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, stack) => Center(child: Text('Error: $err')),
+            data: (roasteries) {
+              return SingleChildScrollView( // <--- DODAJ TO
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   Card(
                     margin: EdgeInsets.zero,
                     child: Padding(
@@ -242,8 +242,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
                   const SizedBox(height: 12),
 
-                  Expanded(
-                    child: Card(
+
+                   Card(
                       margin: EdgeInsets.zero,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -271,7 +271,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                         ),
                       ),
                     ),
-                  ),
 
                   if (isOutlier)
                     Container(
