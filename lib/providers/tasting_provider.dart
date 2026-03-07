@@ -4,15 +4,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
-import '../core/constants.dart'; // Upewnij się, że ten import istnieje na górze
+import '../core/constants.dart';
+import 'package:file_picker/file_picker.dart'; // Opcja B
+import 'package:share_plus/share_plus.dart';   // Opcja B
+
 // ==========================================
 // 1. MODEL DANYCH (STAN)
 // ==========================================
 class TastingState {
-  // Parametry wejściowe
   final String method;
   final String coffeeName;
-  final String beanDetails; // NOWE POLE: Ziarno i pochodzenie
+  final String beanDetails;
 
   final double dose;
   final double waterVolume;
@@ -20,19 +22,16 @@ class TastingState {
   final String grinderName;
   final String grinderSetting;
 
-  // Profil smakowy (SCA Flavor Wheel)
   final String primaryFlavorMain;
   final String primaryFlavorSub;
   final String secondaryFlavorMain;
   final String secondaryFlavorSub;
 
-  // Ewaluacja końcowa (Skale absolutne: smak 0-10, ocena ogólna 1-5)
   final double sweetness;
   final double acidity;
   final double bitterness;
   final double enjoyment;
 
-  // Notatki i defekty
   final String notes;
   final List<String> defects;
   final List<String> dryNotes;
@@ -41,7 +40,7 @@ class TastingState {
   const TastingState({
     this.method = '',
     this.coffeeName = '',
-    this.beanDetails = '', // 2. Konstruktor
+    this.beanDetails = '',
 
     this.dose = 15.0,
     this.waterVolume = 250.0,
@@ -54,9 +53,9 @@ class TastingState {
     this.secondaryFlavorMain = '',
     this.secondaryFlavorSub = '',
     
-    this.sweetness = 5.0,
-    this.acidity = 5.0,
-    this.bitterness = 5.0,
+    this.sweetness = 3.0, // Zmieniono domyślne na środek skali 1-5
+    this.acidity = 3.0,
+    this.bitterness = 3.0,
     this.enjoyment = 3.0,
 
     this.notes = '',
@@ -68,7 +67,7 @@ class TastingState {
   TastingState copyWith({
     String? method,
     String? coffeeName,
-    String? beanDetails, // 3. Parametr copyWith
+    String? beanDetails,
 
     double? dose,
     double? waterVolume,
@@ -94,7 +93,7 @@ class TastingState {
     return TastingState(
       method: method ?? this.method,
       coffeeName: coffeeName ?? this.coffeeName,
-      beanDetails: beanDetails ?? this.beanDetails, // Przypisanie w copyWith
+      beanDetails: beanDetails ?? this.beanDetails,
 
       dose: dose ?? this.dose,
       waterVolume: waterVolume ?? this.waterVolume,
@@ -119,12 +118,11 @@ class TastingState {
     );
   }
 
-  // Serializacja danych do zapisu
   Map<String, dynamic> toMap() {
     return {
       'method': method,
       'coffeeName': coffeeName,
-      'beanDetails': beanDetails, // 4. Serializacja do bazy (Historii)
+      'beanDetails': beanDetails,
       'dose': dose,
       'waterVolume': waterVolume,
       'temperature': temperature,
@@ -155,7 +153,6 @@ class TastingNotifier extends Notifier<TastingState> {
     return const TastingState();
   }
 
-  // Akcje modyfikacji parametrów fizycznych
   void updateMethod(String value) => state = state.copyWith(method: value);
   void updateCoffeeName(String value) => state = state.copyWith(coffeeName: value);
   void updateBeanDetails(String value) => state = state.copyWith(beanDetails: value);
@@ -165,7 +162,7 @@ class TastingNotifier extends Notifier<TastingState> {
   void updateGrinderName(String value) => state = state.copyWith(grinderName: value);
   void updateGrinderSetting(String value) => state = state.copyWith(grinderSetting: value);
 
-void toggleDryNote(String note) {
+  void toggleDryNote(String note) {
     final currentNotes = List<String>.from(state.dryNotes);
     if (currentNotes.contains(note)) {
       currentNotes.remove(note);
@@ -186,7 +183,7 @@ void toggleDryNote(String note) {
   }
   void updateDryNotes(List<String> value) => state = state.copyWith(dryNotes: value);
   void updateWetNotes(List<String> value) => state = state.copyWith(wetNotes: value);
-  // Akcje modyfikacji Koła Smaków
+
   void setPrimaryFlavor(String main, String sub) {
     state = state.copyWith(primaryFlavorMain: main, primaryFlavorSub: sub);
   }
@@ -208,7 +205,6 @@ void toggleDryNote(String note) {
     );
   }
 
-  // Akcje ewaluacji końcowej
   void updateSweetness(double value) => state = state.copyWith(sweetness: value);
   void updateAcidity(double value) => state = state.copyWith(acidity: value);
   void updateBitterness(double value) => state = state.copyWith(bitterness: value);
@@ -226,7 +222,6 @@ void toggleDryNote(String note) {
     state = state.copyWith(defects: currentDefects);
   }
 
-  // Zapis sesji do lokalnej bazy (SharedPreferences)
   Future<void> saveSession() async {
     final prefs = await SharedPreferences.getInstance();
     final historyJson = prefs.getString('tasting_history');
@@ -239,17 +234,13 @@ void toggleDryNote(String note) {
     final sessionData = state.toMap();
     sessionData['timestamp'] = DateTime.now().toIso8601String();
     
-    // Nowa sesja ląduje zawsze na górze listy
     history.insert(0, sessionData);
     
     await prefs.setString('tasting_history', jsonEncode(history));
-
-    // Resetowanie stanu gotowe na kolejne parzenie
     state = const TastingState();
   }
 }
 
-// Główny provider obsługujący formularz parzenia
 final tastingProvider = NotifierProvider<TastingNotifier, TastingState>(() {
   return TastingNotifier();
 });
@@ -258,25 +249,57 @@ final tastingProvider = NotifierProvider<TastingNotifier, TastingState>(() {
 // 3. DOSTAWCY DANYCH HISTORYCZNYCH I FILTRÓW
 // ==========================================
 
-// Dostarcza całą zapisaną historię
+// ZMODYFIKOWANY DOSTAWCA: Implementacja Safe Parsing i migracji w locie
 final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  final historyJson = prefs.getString('tasting_history');
-  
-  if (historyJson == null) return [];
-  
-  final List<dynamic> decoded = jsonDecode(historyJson);
-  return decoded.cast<Map<String, dynamic>>();
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final historyJson = prefs.getString('tasting_history');
+    
+    if (historyJson == null) return [];
+    
+    final List<dynamic> decoded = jsonDecode(historyJson);
+    
+    // Normalizacja potoku danych wejściowych
+    final List<Map<String, dynamic>> sanitizedHistory = decoded.map((item) {
+      final map = Map<String, dynamic>.from(item);
+      
+      // 1. Zabezpieczenie brakujących węzłów struktury
+      map['beanDetails'] ??= '';
+      map['notes'] ??= '';
+      map['defects'] ??= [];
+      map['dryNotes'] ??= [];
+      map['wetNotes'] ??= [];
+      
+      // 2. Normalizacja współrzędnych przestrzeni smaku
+      for (var key in ['sweetness', 'acidity', 'bitterness']) {
+        double val = (map[key] ?? 3.0).toDouble();
+        if (val > 5.0) {
+          val = val / 2.0; 
+        }
+        map[key] = val.clamp(1.0, 5.0);
+      }
+
+      // Normalizacja oceny ogólnej
+      double enjoyment = (map['enjoyment'] ?? 3.0).toDouble();
+      if (enjoyment > 5.0) enjoyment = enjoyment / 2.0;
+      map['enjoyment'] = enjoyment.clamp(1.0, 5.0);
+      
+      return map;
+    }).toList();
+
+    return sanitizedHistory;
+  } catch (e) {
+    // Graceful degradation - zamiast białego ekranu, zwracamy czystą kartę
+    debugPrint('Błąd parsowania układu historii: $e');
+    return [];
+  }
 });
 
-// Zwraca unikalną listę wszystkich wpisanych wcześniej kaw (do autouzupełniania)
 final staticRoasteriesProvider = FutureProvider<List<String>>((ref) async {
   try {
     final String response = await rootBundle.loadString('assets/roasteries.json');
     final List<dynamic> data = jsonDecode(response);
     
-    // Zakładając, że Twój JSON to lista obiektów np. [{"name": "La Cabra"}, ...]
-    // Jeśli JSON to po prostu płaska lista ["La Cabra", "Onyx"], zmień to na: return List<String>.from(data);
     return data.map((e) => e['name'].toString()).toList();
   } catch (e) {
     debugPrint('Błąd ładowania bazy palarni: $e');
@@ -284,12 +307,10 @@ final staticRoasteriesProvider = FutureProvider<List<String>>((ref) async {
   }
 });
 
-// 2. Fuzja: Baza JSON + Własna historia użytkownika
 final combinedRoasteriesProvider = FutureProvider<List<String>>((ref) async {
   final history = ref.watch(historyProvider).value ?? [];
   final staticList = ref.watch(staticRoasteriesProvider).value ?? [];
 
-  // Użycie Set gwarantuje absolutną deduplikację przy minimalnym koszcie obliczeniowym
   final Set<String> unique = {...staticList};
   
   for (var s in history) {
@@ -298,10 +319,9 @@ final combinedRoasteriesProvider = FutureProvider<List<String>>((ref) async {
     }
   }
   
-  return unique.toList()..sort(); // Zwracamy posortowaną alfabetycznie listę
+  return unique.toList()..sort();
 });
 
-// Zwraca unikalną listę historycznie użytych młynków (do autouzupełniania)
 final uniqueGrindersProvider = Provider<List<String>>((ref) {
   final history = ref.watch(historyProvider).value ?? [];
   final Set<String> uniqueGrinders = {};
@@ -325,7 +345,6 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
       final path = cat['icon'] as String;
       try {
         final ByteData data = await rootBundle.load(path);
-        // Wymuszamy rozmiar 18x18 bezpośrednio w fazie dekodowania
         final ui.Codec codec = await ui.instantiateImageCodec(
           data.buffer.asUint8List(), 
           targetWidth: 18, 
@@ -341,3 +360,47 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
   }
   return cache;
 });
+
+// ==========================================
+// 4. MODUŁ ZARZĄDZANIA KOPIAMI ZAPASOWYMI
+// ==========================================
+class BackupService {
+  static Future<void> exportData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? historyJson = prefs.getString('tasting_history');
+    
+    if (historyJson != null && historyJson.isNotEmpty) {
+      await Share.share(historyJson, subject: 'Coffee_Tasting_Backup_${DateTime.now().toIso8601String().substring(0, 10)}.json');
+    }
+  }
+
+  static Future<bool> importData() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json', 'txt'],
+      );
+
+      if (result != null && result.files.single.bytes != null) {
+        final String importedJson = utf8.decode(result.files.single.bytes!);
+        final List<dynamic> importedList = jsonDecode(importedJson);
+        
+        final prefs = await SharedPreferences.getInstance();
+        final String? currentJson = prefs.getString('tasting_history');
+        
+        List<dynamic> currentList = [];
+        if (currentJson != null) {
+          currentList = jsonDecode(currentJson);
+        }
+
+        final combinedList = [...importedList, ...currentList];
+        
+        await prefs.setString('tasting_history', jsonEncode(combinedList));
+        return true; 
+      }
+    } catch (e) {
+      debugPrint('Błąd importu struktury JSON: $e');
+    }
+    return false; 
+  }
+}
