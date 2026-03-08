@@ -1,3 +1,4 @@
+// lib/providers/tasting_provider.dart
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,8 +6,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 import '../core/constants.dart';
-import 'package:file_picker/file_picker.dart'; // Opcja B
-import 'package:share_plus/share_plus.dart';   // Opcja B
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 // ==========================================
 // 1. MODEL DANYCH (STAN)
@@ -22,10 +23,13 @@ class TastingState {
   final String grinderName;
   final String grinderSetting;
 
+  // INŻYNIERIA DANYCH: Rozszerzenie o 3. poziom (Specific)
   final String primaryFlavorMain;
   final String primaryFlavorSub;
+  final String primaryFlavorSpecific; 
   final String secondaryFlavorMain;
   final String secondaryFlavorSub;
+  final String secondaryFlavorSpecific; 
 
   final double sweetness;
   final double acidity;
@@ -50,10 +54,12 @@ class TastingState {
     
     this.primaryFlavorMain = '',
     this.primaryFlavorSub = '',
+    this.primaryFlavorSpecific = '', // INICJALIZACJA
     this.secondaryFlavorMain = '',
     this.secondaryFlavorSub = '',
+    this.secondaryFlavorSpecific = '', // INICJALIZACJA
     
-    this.sweetness = 3.0, // Zmieniono domyślne na środek skali 1-5
+    this.sweetness = 3.0, 
     this.acidity = 3.0,
     this.bitterness = 3.0,
     this.enjoyment = 3.0,
@@ -77,8 +83,10 @@ class TastingState {
     
     String? primaryFlavorMain,
     String? primaryFlavorSub,
+    String? primaryFlavorSpecific, // 3 POZIOM
     String? secondaryFlavorMain,
     String? secondaryFlavorSub,
+    String? secondaryFlavorSpecific, // 3 POZIOM
     
     double? sweetness,
     double? acidity,
@@ -103,8 +111,10 @@ class TastingState {
       
       primaryFlavorMain: primaryFlavorMain ?? this.primaryFlavorMain,
       primaryFlavorSub: primaryFlavorSub ?? this.primaryFlavorSub,
+      primaryFlavorSpecific: primaryFlavorSpecific ?? this.primaryFlavorSpecific,
       secondaryFlavorMain: secondaryFlavorMain ?? this.secondaryFlavorMain,
       secondaryFlavorSub: secondaryFlavorSub ?? this.secondaryFlavorSub,
+      secondaryFlavorSpecific: secondaryFlavorSpecific ?? this.secondaryFlavorSpecific,
       
       sweetness: sweetness ?? this.sweetness,
       acidity: acidity ?? this.acidity,
@@ -130,8 +140,10 @@ class TastingState {
       'grinderSetting': grinderSetting,
       'primaryFlavorMain': primaryFlavorMain,
       'primaryFlavorSub': primaryFlavorSub,
+      'primaryFlavorSpecific': primaryFlavorSpecific, // ZAPIS
       'secondaryFlavorMain': secondaryFlavorMain,
       'secondaryFlavorSub': secondaryFlavorSub,
+      'secondaryFlavorSpecific': secondaryFlavorSpecific, // ZAPIS
       'sweetness': sweetness,
       'acidity': acidity,
       'bitterness': bitterness,
@@ -184,24 +196,39 @@ class TastingNotifier extends Notifier<TastingState> {
   void updateDryNotes(List<String> value) => state = state.copyWith(dryNotes: value);
   void updateWetNotes(List<String> value) => state = state.copyWith(wetNotes: value);
 
-  void setPrimaryFlavor(String main, String sub) {
-    state = state.copyWith(primaryFlavorMain: main, primaryFlavorSub: sub);
+  // AKTUALIZACJA: Metody przyjmują teraz 3 argumenty (Main, Sub, Specific)
+  void setPrimaryFlavor(String main, String sub, String specific) {
+    state = state.copyWith(
+      primaryFlavorMain: main, 
+      primaryFlavorSub: sub,
+      primaryFlavorSpecific: specific,
+    );
   }
   
-  void setSecondaryFlavor(String main, String sub) {
-    state = state.copyWith(secondaryFlavorMain: main, secondaryFlavorSub: sub);
+  void setSecondaryFlavor(String main, String sub, String specific) {
+    state = state.copyWith(
+      secondaryFlavorMain: main, 
+      secondaryFlavorSub: sub,
+      secondaryFlavorSpecific: specific,
+    );
   }
   
-  void updatePrimaryFlavor(String main, String sub) {
-    state = state.copyWith(primaryFlavorMain: main, primaryFlavorSub: sub);
+  void updatePrimaryFlavor(String main, String sub, String specific) {
+    state = state.copyWith(
+      primaryFlavorMain: main, 
+      primaryFlavorSub: sub,
+      primaryFlavorSpecific: specific,
+    );
   }
 
   void clearAllFlavors() {
     state = state.copyWith(
       primaryFlavorMain: '',
       primaryFlavorSub: '',
+      primaryFlavorSpecific: '', // CZYSZCZENIE 3 POZIOMU
       secondaryFlavorMain: '',
       secondaryFlavorSub: '',
+      secondaryFlavorSpecific: '', // CZYSZCZENIE 3 POZIOMU
     );
   }
 
@@ -248,8 +275,6 @@ final tastingProvider = NotifierProvider<TastingNotifier, TastingState>(() {
 // ==========================================
 // 3. DOSTAWCY DANYCH HISTORYCZNYCH I FILTRÓW
 // ==========================================
-
-// ZMODYFIKOWANY DOSTAWCA: Implementacja Safe Parsing i migracji w locie
 final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -259,18 +284,20 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
     
     final List<dynamic> decoded = jsonDecode(historyJson);
     
-    // Normalizacja potoku danych wejściowych
     final List<Map<String, dynamic>> sanitizedHistory = decoded.map((item) {
       final map = Map<String, dynamic>.from(item);
       
-      // 1. Zabezpieczenie brakujących węzłów struktury
+      // MIGRACJA DANYCH WEJŚCIOWYCH
       map['beanDetails'] ??= '';
       map['notes'] ??= '';
       map['defects'] ??= [];
       map['dryNotes'] ??= [];
       map['wetNotes'] ??= [];
       
-      // 2. Normalizacja współrzędnych przestrzeni smaku
+      // Wstrzyknięcie braku 3. poziomu dla starych sesji
+      map['primaryFlavorSpecific'] ??= '';
+      map['secondaryFlavorSpecific'] ??= '';
+      
       for (var key in ['sweetness', 'acidity', 'bitterness']) {
         double val = (map[key] ?? 3.0).toDouble();
         if (val > 5.0) {
@@ -279,7 +306,6 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
         map[key] = val.clamp(1.0, 5.0);
       }
 
-      // Normalizacja oceny ogólnej
       double enjoyment = (map['enjoyment'] ?? 3.0).toDouble();
       if (enjoyment > 5.0) enjoyment = enjoyment / 2.0;
       map['enjoyment'] = enjoyment.clamp(1.0, 5.0);
@@ -289,7 +315,6 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
 
     return sanitizedHistory;
   } catch (e) {
-    // Graceful degradation - zamiast białego ekranu, zwracamy czystą kartę
     debugPrint('Błąd parsowania układu historii: $e');
     return [];
   }

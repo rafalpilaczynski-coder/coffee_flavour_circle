@@ -1,3 +1,4 @@
+// lib/screens/history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart'; // Dodaj intl do pubspec.yaml dla formatowania dat
@@ -92,12 +93,12 @@ class HistoryItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final DateTime date = DateTime.parse(session['timestamp']);
+    // INŻYNIERIA BŁĘDU: Bezpieczne parsowanie daty
+    final DateTime date = DateTime.tryParse(session['timestamp'] ?? '') ?? DateTime.now();
     final String coffeeName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
     
-    // INŻYNIERIA DANYCH: Pobieramy nowe pole beanDetails
+    // Pobieranie nowych danych
     final String beanDetails = session['beanDetails'] ?? '';
-    
     final List<dynamic> defects = session['defects'] ?? [];
     final List<dynamic> dryNotes = session['dryNotes'] ?? [];
     final List<dynamic> wetNotes = session['wetNotes'] ?? [];
@@ -109,9 +110,7 @@ class HistoryItemCard extends StatelessWidget {
       child: ExpansionTile(
         backgroundColor: const Color(0xFF1E1A18),
         collapsedBackgroundColor: const Color(0xFF1E1A18),
-        // Główny tytuł: Palarnia
         title: Text(coffeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        // Podtytuł: Ziarno (jeśli istnieje) + Data
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
           child: Column(
@@ -165,11 +164,20 @@ class HistoryItemCard extends StatelessWidget {
                   const Divider(height: 32, color: Colors.white10),
                 ],
 
-                // 3. PROFIL SMAKOWY (Z IKONAMI)
+                // 3. PROFIL SMAKOWY (Z IKONAMI I 3. POZIOMEM)
                 _buildSectionHeader('FLAVOR PROFILE'),
-                _buildFlavorRow(session['primaryFlavorMain'], session['primaryFlavorSub'], isPrimary: true),
+                _buildFlavorRow(
+                  session['primaryFlavorMain'], 
+                  session['primaryFlavorSub'], 
+                  session['primaryFlavorSpecific'], // Dodano poziom 3
+                  isPrimary: true
+                ),
                 const SizedBox(height: 8),
-                _buildFlavorRow(session['secondaryFlavorMain'], session['secondaryFlavorSub']),
+                _buildFlavorRow(
+                  session['secondaryFlavorMain'], 
+                  session['secondaryFlavorSub'],
+                  session['secondaryFlavorSpecific'] // Dodano poziom 3
+                ),
                 
                 const SizedBox(height: 24),
                 
@@ -249,7 +257,8 @@ class HistoryItemCard extends StatelessWidget {
     );
   }
 
-  Widget _buildFlavorRow(String? main, String? sub, {bool isPrimary = false}) {
+  // Zaktualizowana funkcja do rysowania 3 poziomów smaku
+  Widget _buildFlavorRow(String? main, String? sub, String? specific, {bool isPrimary = false}) {
     if (main == null || main.isEmpty) return const SizedBox.shrink();
     final iconPath = _getIconPath(main);
 
@@ -263,8 +272,15 @@ class HistoryItemCard extends StatelessWidget {
           ),
         const SizedBox(width: 8),
         Text(main, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        
         const Icon(Icons.chevron_right, size: 14, color: Colors.grey),
-        Text(sub ?? 'Overall', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+        Text(sub?.isNotEmpty == true ? sub! : 'Overall', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+        
+        // Dynamiczne renderowanie 3 poziomu (Specific)
+        if (specific != null && specific.isNotEmpty) ...[
+          const Icon(Icons.chevron_right, size: 14, color: Colors.grey),
+          Text(specific, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+        ],
       ],
     );
   }
