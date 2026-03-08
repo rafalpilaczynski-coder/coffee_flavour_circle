@@ -13,7 +13,55 @@ class HistoryScreen extends ConsumerWidget {
     final historyAsync = ref.watch(historyProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Brewing History'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Brewing History'), 
+        centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.settings),
+            onSelected: (value) async {
+              if (value == 'export') {
+                await BackupService.exportData();
+              } else if (value == 'import') {
+                final success = await BackupService.importData();
+                if (success) {
+                  // Odświeżenie stanu historii po udanym imporcie
+                  ref.invalidate(historyProvider); 
+                  
+                  // Bezpieczne wywołanie SnackBar po operacji asynchronicznej
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Data imported successfully!', style: TextStyle(color: Colors.white)),
+                        backgroundColor: Colors.green.shade700,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.upload_file),
+                  title: Text('Export Backup'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.download),
+                  title: Text('Import Backup'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: historyAsync.when(
         data: (sessions) => sessions.isEmpty
             ? const Center(child: Text('No sessions recorded yet.', style: TextStyle(color: Colors.grey)))
