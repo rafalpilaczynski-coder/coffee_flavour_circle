@@ -1,0 +1,73 @@
+name: Flutter Build Release (Android & iOS)
+
+# 1. WYZWALACZE POTOKU
+on:
+  push:
+    branches: [ "main", "master" ] # Automatyczny start po pushu na gałąź główną
+  workflow_dispatch:               # Pozwala na ręczne wyzwolenie z poziomu przeglądarki (zakładka Actions na GitHubie)
+
+jobs:
+  # ==========================================
+  # ZADANIE 1: KOMPILACJA ANDROID (APK)
+  # ==========================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobranie repozytorium
+        uses: actions/checkout@v4
+
+      - name: Konfiguracja środowiska Java (Wymagane przez Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Konfiguracja silnika Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Pobranie zależności
+        run: flutter pub get
+
+      - name: Kompilacja APK (Release)
+        run: flutter build apk --release
+
+      - name: Publikacja Artefaktu (Do pobrania)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7 # GitHub usunie plik po 7 dniach, by oszczędzać miejsce
+
+  # ==========================================
+  # ZADANIE 2: KOMPILACJA iOS (Brak podpisu)
+  # ==========================================
+  build-ios:
+    name: Build iOS (Unsigned)
+    runs-on: macos-latest
+    steps:
+      - name: Pobranie repozytorium
+        uses: actions/checkout@v4
+
+      - name: Konfiguracja silnika Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Pobranie zależności
+        run: flutter pub get
+
+      - name: Kompilacja iOS bez podpisu cyfrowego
+        run: flutter build ios --release --no-codesign
+
+      - name: Kompresja pliku .app do formatu ZIP
+        run: cd build/ios/iphoneos && zip -r Runner.app.zip Runner.app
+
+      - name: Publikacja Artefaktu (Do pobrania)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-ios-unsigned
+          path: build/ios/iphoneos/Runner.app.zip
+          retention-days: 7
