@@ -1,6 +1,6 @@
 // lib/screens/flavor_wheel_screen.dart
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui; // Wymagane do ui.Image
+import 'dart:ui' as ui;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
@@ -8,7 +8,6 @@ import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
 
-// Dodano stany Tertiary (poziom 3)
 enum WheelPhase { primaryMain, primarySub, primaryTertiary, secondaryMain, secondarySub, secondaryTertiary, completed }
 
 class FlavorWheelScreen extends ConsumerStatefulWidget {
@@ -26,22 +25,22 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
   
   String? _tempSubSelection;
   int? _tempSubIndex;
-  
-  Alignment _tapAlignment = Alignment.center;
 
-  void _handleSegmentTap(String categoryName, int index, Alignment tapOrigin) {
+  // Flaga do ponownego odpalania animacji wachlarza
+  Key _animationKey = UniqueKey();
+
+  void _handleSegmentTap(String categoryName, int index) {
     final notifier = ref.read(tastingProvider.notifier);
     
-    // Zabezpieczenie przed kliknięciem "Overall" na 3 poziomie (które generujemy w locie)
     if (categoryName.startsWith('Overall\n')) {
       categoryName = '';
     }
 
     setState(() {
-      _tapAlignment = tapOrigin;
+      // Zmiana klucza wymusza restart TweenAnimationBuilder
+      _animationKey = UniqueKey();
 
       switch (_currentPhase) {
-        // --- ŚCIEŻKA GŁÓWNA ---
         case WheelPhase.primaryMain:
           _tempMainSelection = categoryName;
           _tempMainIndex = index;
@@ -49,7 +48,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           break;
           
         case WheelPhase.primarySub:
-          // Sprawdzamy, czy "Overall" lub dany smak posiada podkategorie
           if (categoryName.isEmpty || categoryName.startsWith('Overall')) {
              notifier.setPrimaryFlavor(_tempMainSelection!, '', '');
              _resetTemps();
@@ -59,7 +57,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
              final List<String> tertiaryList = subMap[categoryName] ?? [];
              
              if (tertiaryList.isEmpty) {
-                // Jeśli brak 3 poziomu (np. Vanilla), przeskakujemy od razu dalej
                 notifier.setPrimaryFlavor(_tempMainSelection!, categoryName, '');
                 _resetTemps();
                 _currentPhase = WheelPhase.secondaryMain;
@@ -77,7 +74,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           _currentPhase = WheelPhase.secondaryMain;
           break;
 
-        // --- ŚCIEŻKA DRUGORZĘDNA ---
         case WheelPhase.secondaryMain:
           _tempMainSelection = categoryName;
           _tempMainIndex = index;
@@ -129,7 +125,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
     setState(() {
       _currentPhase = WheelPhase.primaryMain;
       _resetTemps();
-      _tapAlignment = Alignment.center;
+      _animationKey = UniqueKey();
     });
   }
 
@@ -147,11 +143,9 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
         double baseStartAngle = -math.pi / 2;
         double totalSweepAngle = 2 * math.pi;
 
-        // Faza 1: Główne Kategorie (Poziom 1)
         if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
           activeCategories = mainFlavorCategories; 
         } 
-        // Faza 2: Podkategorie (Poziom 2)
         else if ((_currentPhase == WheelPhase.primarySub || _currentPhase == WheelPhase.secondarySub) && _tempMainSelection != null && _tempMainIndex != null) {
           final treeNode = flavorTree[_tempMainSelection];
           if (treeNode == null) {
@@ -160,7 +154,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           }
 
           final parentColor = treeNode['color'] as Color;
-          // Zbieramy klucze z mapy "sub" (czyli nazwy smaków drugiego poziomu)
           final subMap = treeNode['sub'] as Map<String, List<String>>;
           final subList = subMap.keys.toList();
           
@@ -171,10 +164,9 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           double parentSweepAngle = (2 * math.pi) / mainFlavorCategories.length;
           double parentMiddleAngle = -math.pi / 2 + (_tempMainIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
-          totalSweepAngle = 180 * (math.pi / 180);
+          totalSweepAngle = 160 * (math.pi / 180);
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
-        // Faza 3: Specyfika (Poziom 3)
         else if ((_currentPhase == WheelPhase.primaryTertiary || _currentPhase == WheelPhase.secondaryTertiary) && _tempMainSelection != null && _tempSubSelection != null) {
           final parentColor = flavorTree[_tempMainSelection!]!['color'] as Color;
           final Map<String, List<String>> subMap = flavorTree[_tempMainSelection!]!['sub'];
@@ -184,18 +176,17 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
 
           activeCategories = specificList.map((specName) => {'name': specName, 'color': parentColor}).toList();
           
-          // Obliczanie położenia okna wycinka z poprzedniego poziomu
           double grandParentSweep = (2 * math.pi) / mainFlavorCategories.length;
           double grandParentMiddle = -math.pi / 2 + (_tempMainIndex! * grandParentSweep) + (grandParentSweep / 2);
-          double prevTotalSweep = 180 * (math.pi / 180);
+          double prevTotalSweep = 160 * (math.pi / 180);
           double prevBaseStart = grandParentMiddle - (prevTotalSweep / 2);
           
-          int oldSubListLength = subMap.keys.length + 1; // +1 dla "Overall"
+          int oldSubListLength = subMap.keys.length + 1; 
           double parentSweepAngle = prevTotalSweep / oldSubListLength;
           double parentMiddleAngle = prevBaseStart + (_tempSubIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
-          // Węższy wycinek dla 3. poziomu
-          totalSweepAngle = 160 * (math.pi / 180); 
+          // Półkole dla 3 poziomu (180 stopni)
+          totalSweepAngle = 180 * (math.pi / 180); 
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
 
@@ -210,7 +201,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
               const SizedBox(height: 20),
               Text(
                 _currentPhase.name.contains('Tertiary') ? "Select specific note" : "Follow the flavor path", 
-                style: const TextStyle(fontSize: 16, color: Colors.amber)
+                style: const TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.w600, letterSpacing: 0.5)
               ),
               const SizedBox(height: 30),
               
@@ -220,75 +211,64 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                       height: 300, 
                       child: Center(child: Icon(Icons.check_circle, size: 100, color: Colors.green))
                     )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 550),
-                      switchInCurve: Curves.easeOutBack,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (Widget child, Animation<double> animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
-                            scale: Tween<double>(begin: 0.2, end: 1.0).animate(animation),
-                            alignment: _tapAlignment,
-                            child: child,
-                          ),
-                        );
+                  : GestureDetector(
+                      onTapUp: (details) {
+                        const double centerOffset = 150.0;
+                        double dx = details.localPosition.dx - centerOffset;
+                        double dy = details.localPosition.dy - centerOffset;
+
+                        // Większy martwy punkt w środku koła, by uniknąć przypadkowych kliknięć
+                        if (math.sqrt(dx * dx + dy * dy) < centerOffset * 0.35) return; 
+
+                        double touchAngle = math.atan2(dy, dx);
+                        double relativeAngle = (touchAngle - baseStartAngle) % (2 * math.pi);
+                        if (relativeAngle < 0) relativeAngle += 2 * math.pi;
+
+                        if (relativeAngle <= totalSweepAngle) {
+                          int index = (relativeAngle / totalSweepAngle * activeCategories.length).floor();
+                          if (index == activeCategories.length) index--; 
+                          _handleSegmentTap(activeCategories[index]['name'], index);
+                        }
                       },
-                      child: GestureDetector(
-                        key: ValueKey('$_currentPhase-$_tempMainSelection-$_tempSubSelection'), 
-                        onTapUp: (details) {
-                          const double centerOffset = 150.0;
-                          double dx = details.localPosition.dx - centerOffset;
-                          double dy = details.localPosition.dy - centerOffset;
-
-                          if (math.sqrt(dx * dx + dy * dy) < centerOffset * 0.3) return; 
-
-                          double touchAngle = math.atan2(dy, dx);
-                          double relativeAngle = (touchAngle - baseStartAngle) % (2 * math.pi);
-                          if (relativeAngle < 0) relativeAngle += 2 * math.pi;
-
-                          if (relativeAngle <= totalSweepAngle) {
-                            int index = (relativeAngle / totalSweepAngle * activeCategories.length).floor();
-                            if (index == activeCategories.length) index--; 
-                            
-                            double segmentSweep = totalSweepAngle / activeCategories.length;
-                            double segmentMiddleAngle = baseStartAngle + (index * segmentSweep) + (segmentSweep / 2);
-                            
-                            Alignment tapAlign = Alignment(math.cos(segmentMiddleAngle), math.sin(segmentMiddleAngle));
-
-                            _handleSegmentTap(activeCategories[index]['name'], index, tapAlign);
-                          }
+                      // INŻYNIERIA PŁYNNOŚCI: Płynne, fizyczne "rozwijanie" wachlarza
+                      child: TweenAnimationBuilder<double>(
+                        key: _animationKey,
+                        tween: Tween<double>(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 650),
+                        curve: Curves.easeOutQuart,
+                        builder: (context, animValue, child) {
+                          return CustomPaint(
+                            size: const Size(300, 300),
+                            painter: WheelPainter(
+                              categories: activeCategories,
+                              baseStartAngle: baseStartAngle,
+                              totalSweepAngle: totalSweepAngle,
+                              animMultiplier: animValue, // Przekazanie stanu animacji do silnika
+                              loadedIcons: loadedIcons,
+                              isInnerWheel: (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain)
+                            ),
+                          );
                         },
-                        child: CustomPaint(
-                          size: const Size(300, 300),
-                          painter: WheelPainter(
-                            categories: activeCategories,
-                            baseStartAngle: baseStartAngle,
-                            totalSweepAngle: totalSweepAngle,
-                            loadedIcons: loadedIcons,
-                            isInnerWheel: (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain)
-                          ),
-                        ),
                       ),
                     ),
               ),
               
               const Spacer(),
               
-              // ---------------------------------------------
-              // INŻYNIERIA UX: Dynamiczne budowanie ścieżek tekstowych
-              // ---------------------------------------------
               if (tastingData.primaryFlavorMain.isNotEmpty) 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Card(
-                    color: Colors.blueGrey.withValues(alpha: 0.3),
+                    color: Colors.blueGrey.withValues(alpha: 0.2),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
                     child: ListTile(
-                      title: const Text('Primary Flavor'),
+                      title: const Text('Primary Flavor', style: TextStyle(fontSize: 12, color: Colors.grey)),
                       subtitle: Text(
                         '${tastingData.primaryFlavorMain}'
                         '${tastingData.primaryFlavorSub.isNotEmpty ? " ➔ ${tastingData.primaryFlavorSub}" : ""}'
-                        '${tastingData.primaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.primaryFlavorSpecific}" : ""}'
+                        '${tastingData.primaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.primaryFlavorSpecific}" : ""}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
                       ),
                       leading: const Icon(Icons.star, color: Colors.amber),
                     ),
@@ -299,13 +279,16 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Card(
-                    color: Colors.blueGrey.withValues(alpha: 0.3),
+                    color: Colors.blueGrey.withValues(alpha: 0.2),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
                     child: ListTile(
-                      title: const Text('Secondary Flavor'),
+                      title: const Text('Secondary Flavor', style: TextStyle(fontSize: 12, color: Colors.grey)),
                       subtitle: Text(
                         '${tastingData.secondaryFlavorMain}'
                         '${tastingData.secondaryFlavorSub.isNotEmpty ? " ➔ ${tastingData.secondaryFlavorSub}" : ""}'
-                        '${tastingData.secondaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.secondaryFlavorSpecific}" : ""}'
+                        '${tastingData.secondaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.secondaryFlavorSpecific}" : ""}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
                       ),
                       leading: const Icon(Icons.star_half, color: Colors.amberAccent),
                     ),
@@ -331,6 +314,7 @@ class WheelPainter extends CustomPainter {
   final List<Map<String, dynamic>> categories;
   final double baseStartAngle;
   final double totalSweepAngle;
+  final double animMultiplier;
   final Map<String, ui.Image> loadedIcons;
   final bool isInnerWheel;
 
@@ -338,6 +322,7 @@ class WheelPainter extends CustomPainter {
     required this.categories, 
     required this.baseStartAngle, 
     required this.totalSweepAngle,
+    required this.animMultiplier,
     required this.loadedIcons,
     required this.isInnerWheel,
   });
@@ -350,55 +335,80 @@ class WheelPainter extends CustomPainter {
     final radius = size.width / 2;
     final rect = Rect.fromCircle(center: center, radius: radius);
     
-    final double sweepAngle = totalSweepAngle / categories.length;
+    // Używamy z mnożnikiem animacji
+    final double sweepAngle = (totalSweepAngle / categories.length) * animMultiplier;
     double currentAngle = baseStartAngle;
 
     for (var cat in categories) {
+      final Color baseColor = cat['color'];
+      
+      // INŻYNIERIA ESTETYKI 1: Miękki RadialGradient zamiast płaskiego koloru
+      final gradient = RadialGradient(
+        center: Alignment.center,
+        radius: 1.0,
+        colors: [
+          baseColor.withValues(alpha: 0.7), // Jaśniejszy środek
+          baseColor, // Głęboki kolor na krawędziach
+        ],
+      ).createShader(rect);
+
       final paint = Paint()
-        ..color = cat['color']
+        ..shader = gradient
         ..style = PaintingStyle.fill;
+      
       canvas.drawArc(rect, currentAngle, sweepAngle, true, paint);
       
+      // INŻYNIERIA ESTETYKI 2: Przestrzeń negatywowa (grube linie w kolorze tła zamiast czarnych ramek)
       final borderPaint = Paint()
-        ..color = Colors.black.withValues(alpha: 0.5)
+        ..color = const Color(0xFF121212) // Kolor tła aplikacji (Twój Scaffold background)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
+        ..strokeWidth = 3.5; 
+        
       canvas.drawArc(rect, currentAngle, sweepAngle, true, borderPaint);
 
-      if (isInnerWheel && cat.containsKey('icon') && loadedIcons.containsKey(cat['icon'])) {
-         _drawBlackIcon(canvas, center, radius, currentAngle, sweepAngle, loadedIcons[cat['icon']]!);
-         _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], 0.52);
-      } else {
-         _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], 0.65);
+      // Renderowanie zawartości wycinka z efektem Fade-In powiązanym z animacją
+      if (animMultiplier > 0.5) {
+        final opacity = (animMultiplier - 0.5) * 2; // Od 0 do 1 w drugiej połowie animacji
+        
+        if (isInnerWheel && cat.containsKey('icon') && loadedIcons.containsKey(cat['icon'])) {
+           _drawIconAndText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], loadedIcons[cat['icon']]!, opacity);
+        } else {
+           _drawText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], 0.65, opacity);
+        }
       }
 
       currentAngle += sweepAngle;
     }
 
-    canvas.drawCircle(center, radius * 0.25, Paint()..color = const Color(0xFF121212));
+    // Środek koła wycięty przestrzenią negatywową
+    canvas.drawCircle(center, radius * 0.28, Paint()..color = const Color(0xFF121212));
   }
 
-  void _drawBlackIcon(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, ui.Image image) {
+  void _drawIconAndText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text, ui.Image image, double opacity) {
     final double midAngle = startAngle + (sweepAngle / 2);
-    final double iconRadius = radius * 0.82; 
     
+    // Rysowanie Ikony
+    final double iconRadius = radius * 0.82; 
     final double imgX = center.dx + iconRadius * math.cos(midAngle);
     final double imgY = center.dy + iconRadius * math.sin(midAngle);
 
     canvas.save();
     canvas.translate(imgX, imgY);
-    
     double rotation = midAngle + math.pi / 2;
     canvas.rotate(rotation);
 
+    // INŻYNIERIA ESTETYKI 3: Białe ikony z lekką przezroczystością
     final paint = Paint()
-      ..colorFilter = const ColorFilter.mode(Colors.black, BlendMode.srcIn);
+      ..colorFilter = ColorFilter.mode(Colors.white.withValues(alpha: 0.85 * opacity), BlendMode.srcIn);
 
     canvas.drawImage(image, Offset(-image.width / 2, -image.height / 2), paint);
     canvas.restore();
+
+    // Rysowanie Tekstu niżej
+    _drawText(canvas, center, radius, startAngle, sweepAngle, text, 0.52, opacity);
   }
 
-  void _drawText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text, double radiusMultiplier) {
+  void _drawText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text, double radiusMultiplier, double opacity) {
     final double textAngle = startAngle + (sweepAngle / 2);
     final double textRadius = radius * radiusMultiplier; 
     
@@ -417,19 +427,21 @@ class WheelPainter extends CustomPainter {
     final formattedText = text.replaceFirst('/', '/\n');
     final textSpan = TextSpan(
       text: formattedText,
-      style: const TextStyle(
-        color: Colors.white, 
-        fontSize: 11.5,
-        fontWeight: FontWeight.w800,
-        height: 1.05,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: opacity), 
+        fontSize: 12.0,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+        height: 1.1,
+        // INŻYNIERIA ESTETYKI 4: Miękki, rozproszony cień ułatwiający czytanie
         shadows: [
-          Shadow(color: Colors.black, blurRadius: 4),
-          Shadow(color: Colors.black, blurRadius: 2),
+          Shadow(color: Colors.black.withValues(alpha: 0.8 * opacity), blurRadius: 4, offset: const Offset(0, 1.5)),
         ],
       ),
     );
+    
     final textPainter = TextPainter(text: textSpan, textAlign: TextAlign.center, textDirection: TextDirection.ltr);
-    textPainter.layout(maxWidth: radius * 0.5); 
+    textPainter.layout(maxWidth: radius * 0.6); 
     textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
     canvas.restore();
   }
@@ -438,6 +450,7 @@ class WheelPainter extends CustomPainter {
   bool shouldRepaint(covariant WheelPainter oldDelegate) {
     return oldDelegate.categories != categories || 
            oldDelegate.baseStartAngle != baseStartAngle ||
+           oldDelegate.animMultiplier != animMultiplier ||
            oldDelegate.loadedIcons.length != loadedIcons.length;
   }
 }
