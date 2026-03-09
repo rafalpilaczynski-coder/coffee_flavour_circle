@@ -38,7 +38,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
   Widget _buildAutocompleteField({
     required String label,
-    required Iterable<String> options, // Zmiana z List na Iterable (standard dla Autocomplete)
+    required Iterable<String> options, 
     required String initialValue,
     required Function(String) onSelected,
     required Function(String) onChanged,
@@ -64,7 +64,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
         );
       },
       optionsViewBuilder: (context, onSelected, options) {
-        // Twarde rzutowanie Iterable do Listy, co zapobiega błędom RangeError
         final optionsList = options.toList(); 
         return Align(
           alignment: Alignment.topLeft,
@@ -79,7 +78,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                 shrinkWrap: true,
                 itemCount: optionsList.length,
                 itemBuilder: (context, index) {
-                  final option = optionsList[index]; // Bezpieczny odczyt po indeksie
+                  final option = optionsList[index]; 
                   return ListTile(
                     dense: true,
                     title: Text(option, style: const TextStyle(color: appTextPrimary, fontSize: 13)),
@@ -101,21 +100,21 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final notifier = ref.read(tastingProvider.notifier);
     final userPrefs = ref.watch(userPreferencesProvider);
     
-    // INŻYNIERIA BŁĘDU: Pobieramy cały obiekt asynchroniczny, nie tylko ".value"
     final asyncRoasteries = ref.watch(combinedRoasteriesProvider);
+    
+    // INŻYNIERIA BAZY DANYCH: Pobieranie bazy młynków i kalkulacja mnożnika
+    final grindersAsync = ref.watch(grindersDatabaseProvider);
 
-    // 2. LOGIKA MŁYNKÓW I METOD (bez zmian)
+    // 2. LOGIKA MŁYNKÓW I METOD
     final activeMethods = userPrefs.activeMethods.isNotEmpty ? userPrefs.activeMethods : ['V60'];
     final selectedMethod = activeMethods.contains(tastingData.method) ? tastingData.method : activeMethods.first;
 
     final activeGrinders = userPrefs.grinders.where((g) => g.trim().isNotEmpty).toList();
     final defaultGrinder = activeGrinders.isNotEmpty ? activeGrinders.first : '';
     
-    if (!activeGrinders.contains('')) activeGrinders.add('');
-
     final selectedGrinder = (tastingData.grinderName.isEmpty && defaultGrinder.isNotEmpty) 
         ? defaultGrinder 
-        : (activeGrinders.contains(tastingData.grinderName) ? tastingData.grinderName : defaultGrinder);
+        : tastingData.grinderName;
 
     if (tastingData.grinderName != selectedGrinder) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -123,10 +122,14 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
       });
     }
 
+    // Wyciąganie mnożnika na bazie wybranego młynka (0.0 jeśli nie ma go w bazie)
+    final activeGrinderModel = grindersAsync.value?.where((g) => g.fullName == selectedGrinder).firstOrNull;
+    final double activeMultiplier = activeGrinderModel?.stepMicron ?? 0.0;
+
     final history = ref.watch(historyProvider).value ?? [];
     String? lastSetting;
     
-    ref.read(iconCacheProvider); // Wymusza rozpoczęcie dekodowania ikon w tle
+    ref.read(iconCacheProvider); 
 
     if (selectedGrinder.isNotEmpty) {
       try {
@@ -142,7 +145,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
     final hintText = (lastSetting != null && lastSetting.isNotEmpty) 
         ? 'last: $lastSetting' 
-        : 'e.g. 24';
+        : 'e.g. 96';
 
     final dose = tastingData.dose;
     final water = tastingData.waterVolume;
@@ -161,7 +164,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (err, stack) => Center(child: Text('Error: $err')),
             data: (roasteries) {
-              return SingleChildScrollView( // <--- DODAJ TO
+              return SingleChildScrollView( 
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -172,7 +175,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                       padding: const EdgeInsets.all(12.0),
                       child: Column(
                         children: [
-                          Row(
+Row(
                             children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
@@ -191,7 +194,10 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                   dropdownColor: const Color(0xFF1E1A18),
                                   iconSize: 28,
                                   decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
-                                  items: activeGrinders.map((g) => DropdownMenuItem(value: g, child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)))).toList(),
+                                  items: activeGrinders.map((g) => DropdownMenuItem(
+                                    value: g, 
+                                    child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)) // Zmniejszono czcionkę dla długich nazw
+                                  )).toList(),
                                   onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
                                 ),
                               ),
@@ -203,7 +209,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                               Expanded(
                                 child: _buildAutocompleteField(
                                   label: 'Roaster (Palarnia)', 
-                                  options: roasteries, // Bezpieczne przekazanie gotowej listy
+                                  options: roasteries, 
                                   initialValue: tastingData.coffeeName,
                                   onSelected: (val) => notifier.updateCoffeeName(val),
                                   onChanged: (val) => notifier.updateCoffeeName(val),
@@ -213,12 +219,33 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                               Expanded(
                                 child: TextField(
                                   controller: _grinderSettingController,
+                                  keyboardType: TextInputType.number,
                                   decoration: InputDecoration(
                                     labelText: 'Clicks/Setting',
                                     hintText: hintText,
                                     hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                    // DYNAMICZNY KALKULATOR MIKROMETRÓW
+                                    suffixIcon: activeMultiplier > 0 
+                                      ? Padding(
+                                          padding: const EdgeInsets.only(right: 8.0),
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                tastingData.grinderSetting.isNotEmpty && int.tryParse(tastingData.grinderSetting) != null
+                                                    ? '${(int.parse(tastingData.grinderSetting) * activeMultiplier).toInt()} µm'
+                                                    : '0 µm',
+                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                              ),
+                                              const Text('Gap', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                                            ],
+                                          ),
+                                        )
+                                      : null,
                                   ),
                                   onChanged: (val) => notifier.updateGrinderSetting(val),
                                 ),
@@ -241,7 +268,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                   ),
 
                   const SizedBox(height: 12),
-
 
                    Card(
                       margin: EdgeInsets.zero,
@@ -309,6 +335,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     );
   }
 }
+
 // ============================================================================
 // KOMPONENT HYBRYDOWY: Suwak zsynchronizowany z klawiaturą (Slider + TextField)
 // ============================================================================
@@ -348,7 +375,6 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
     _controller = TextEditingController(text: _formatValue(widget.value));
     _focusNode = FocusNode();
     
-    // Zabezpieczenie: jeśli użytkownik kliknie gdzie indziej, pole resetuje się do poprawnej wartości
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
         _controller.text = _formatValue(widget.value);
@@ -359,7 +385,6 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
   @override
   void didUpdateWidget(covariant SliderWithTextInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Aktualizujemy pole tekstowe gdy zmieni się suwak, ALE NIE gdy użytkownik właśnie wpisuje
     if (oldWidget.value != widget.value && !_focusNode.hasFocus) {
       _controller.text = _formatValue(widget.value);
     }
@@ -386,7 +411,6 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
           children: [
             Text(widget.label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
             
-            // Okienko wpisywania wartości
             Container(
               width: 75,
               decoration: BoxDecoration(
@@ -408,7 +432,6 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
                   border: InputBorder.none,
                 ),
                 onSubmitted: (val) {
-                  // Inteligentne parsowanie (obsługuje kropki i polskie przecinki)
                   final parsed = double.tryParse(val.replaceAll(',', '.'));
                   if (parsed != null && parsed >= widget.min && parsed <= widget.max) {
                     widget.onChanged(parsed);

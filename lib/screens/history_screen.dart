@@ -78,11 +78,10 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
-class HistoryItemCard extends StatelessWidget {
+class HistoryItemCard extends ConsumerWidget { // ZMIANA 1: Z Stateless na ConsumerWidget
   final Map<String, dynamic> session;
   const HistoryItemCard({super.key, required this.session});
 
-  // Pomocnicza funkcja do znajdowania ikony dla kategorii
   String? _getIconPath(String category) {
     try {
       return mainFlavorCategories.firstWhere((c) => c['name'] == category)['icon'];
@@ -92,16 +91,25 @@ class HistoryItemCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    // INŻYNIERIA BŁĘDU: Bezpieczne parsowanie daty
+  Widget build(BuildContext context, WidgetRef ref) { // ZMIANA 2: Wstrzyknięcie WidgetRef
     final DateTime date = DateTime.tryParse(session['timestamp'] ?? '') ?? DateTime.now();
     final String coffeeName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
     
-    // Pobieranie nowych danych
     final String beanDetails = session['beanDetails'] ?? '';
     final List<dynamic> defects = session['defects'] ?? [];
     final List<dynamic> dryNotes = session['dryNotes'] ?? [];
     final List<dynamic> wetNotes = session['wetNotes'] ?? [];
+
+    // INŻYNIERIA BAZY: Odczyt młynka i kalkulacja mikrometrów na żywo
+    final grindersAsync = ref.watch(grindersDatabaseProvider);
+    final String grinderName = session['grinderName']?.toString().isNotEmpty == true ? session['grinderName'] : '';
+    final String clicksStr = session['grinderSetting']?.toString() ?? '0';
+    final int clicks = int.tryParse(clicksStr) ?? 0;
+    
+    // Szukamy mnożnika w bazie
+    final activeGrinder = grindersAsync.value?.where((g) => g.fullName == grinderName).firstOrNull;
+    final double activeMultiplier = activeGrinder?.stepMicron ?? 0.0;
+    final double microns = clicks * activeMultiplier;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -137,20 +145,56 @@ class HistoryItemCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. PARAMETRY FIZYCZNE
                 _buildSectionHeader('BREW SPECS'),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround, // Lepsze rozłożenie dla 3 elementów
                   children: [
                     _buildMiniInfo(Icons.water_drop, '${session['waterVolume']}ml'),
                     _buildMiniInfo(Icons.scale, '${session['dose']}g'),
                     _buildMiniInfo(Icons.thermostat, '${session['temperature']}°C'),
-                    _buildMiniInfo(Icons.settings, session['grinderSetting'] ?? '-'),
+                    // Młynek usunięty z tego rzędu - przeniesiony niżej
                   ],
                 ),
+                const SizedBox(height: 16),
+                
+                // ZMIANA 3: Dedykowany baner dla młynka i mikrometrów
+                if (grinderName.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.settings_input_component, size: 16, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            grinderName,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '$clicksStr clicks',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.amber),
+                        ),
+                        // Wyświetlamy mikrometry tylko, jeśli młynek jest w bazie i wpisano wartość > 0
+                        if (activeMultiplier > 0 && clicks > 0) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${microns.toInt()} µm)',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                
                 const Divider(height: 32, color: Colors.white10),
 
-                // 2. FRAGRANCE & AROMA (TAGI)
                 if (dryNotes.isNotEmpty || wetNotes.isNotEmpty) ...[
                   _buildSectionHeader('FRAGRANCE / AROMA'),
                   if (dryNotes.isNotEmpty) ...[
@@ -164,36 +208,33 @@ class HistoryItemCard extends StatelessWidget {
                   const Divider(height: 32, color: Colors.white10),
                 ],
 
-                // 3. PROFIL SMAKOWY (Z IKONAMI I 3. POZIOMEM)
                 _buildSectionHeader('FLAVOR PROFILE'),
                 _buildFlavorRow(
                   session['primaryFlavorMain'], 
                   session['primaryFlavorSub'], 
-                  session['primaryFlavorSpecific'], // Dodano poziom 3
+                  session['primaryFlavorSpecific'], 
                   isPrimary: true
                 ),
                 const SizedBox(height: 8),
                 _buildFlavorRow(
                   session['secondaryFlavorMain'], 
                   session['secondaryFlavorSub'],
-                  session['secondaryFlavorSpecific'] // Dodano poziom 3
+                  session['secondaryFlavorSpecific'] 
                 ),
                 
                 const SizedBox(height: 24),
                 
-                // TWÓJ ORYGINALNY WYKRES (fl_chart)
                 Center(
                   child: TasteRadarChart(
                     sweetness: (session['sweetness'] ?? 5.0).toDouble(),
                     acidity: (session['acidity'] ?? 5.0).toDouble(),
                     bitterness: (session['bitterness'] ?? 5.0).toDouble(),
-                    size: 120, // Lekko powiększony dla lepszej widoczności
+                    size: 120, 
                   ),
                 ),
 
                 const Divider(height: 32, color: Colors.white10),
                 
-                // 4. DEFEKTY (JEŚLI SĄ)
                 if (defects.isNotEmpty) ...[
                   _buildSectionHeader('SCA DEFECTS'),
                   Wrap(
@@ -207,7 +248,6 @@ class HistoryItemCard extends StatelessWidget {
                   const Divider(height: 32, color: Colors.white10),
                 ],
 
-                // 5. NOTATKI
                 if (session['notes']?.toString().isNotEmpty ?? false) ...[
                   _buildSectionHeader('NOTES'),
                   Text(
@@ -257,7 +297,6 @@ class HistoryItemCard extends StatelessWidget {
     );
   }
 
-  // Zaktualizowana funkcja do rysowania 3 poziomów smaku
   Widget _buildFlavorRow(String? main, String? sub, String? specific, {bool isPrimary = false}) {
     if (main == null || main.isEmpty) return const SizedBox.shrink();
     final iconPath = _getIconPath(main);
@@ -276,7 +315,6 @@ class HistoryItemCard extends StatelessWidget {
         const Icon(Icons.chevron_right, size: 14, color: Colors.grey),
         Text(sub?.isNotEmpty == true ? sub! : 'Overall', style: const TextStyle(fontSize: 13, color: Colors.white70)),
         
-        // Dynamiczne renderowanie 3 poziomu (Specific)
         if (specific != null && specific.isNotEmpty) ...[
           const Icon(Icons.chevron_right, size: 14, color: Colors.grey),
           Text(specific, style: const TextStyle(fontSize: 13, color: Colors.white70)),

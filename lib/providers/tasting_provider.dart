@@ -429,3 +429,35 @@ class BackupService {
     return false; 
   }
 }
+// ==========================================
+// 5. BAZA MŁYNKÓW (GRINDERS DATABASE)
+// ==========================================
+
+class GrinderModel {
+  final String brand;
+  final String model;
+  final double stepMicron;
+
+  GrinderModel({required this.brand, required this.model, required this.stepMicron});
+
+  factory GrinderModel.fromJson(Map<String, dynamic> json) {
+    return GrinderModel(
+      brand: json['brand'] ?? 'Unknown',
+      model: json['model'] ?? 'Unknown',
+      stepMicron: (json['step_micron'] ?? 0.0).toDouble(),
+    );
+  }
+  
+  String get fullName => '$brand $model';
+}
+
+final grindersDatabaseProvider = FutureProvider<List<GrinderModel>>((ref) async {
+  try {
+    final String response = await rootBundle.loadString('assets/grinders.json');
+    final List<dynamic> data = jsonDecode(response);
+    return data.map((e) => GrinderModel.fromJson(e)).toList();
+  } catch (e) {
+    debugPrint('Błąd wczytywania bazy młynków: $e');
+    return [];
+  }
+});

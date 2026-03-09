@@ -1,12 +1,13 @@
+// lib/screens/personal_settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/user_preferences_provider.dart';
+import '../providers/tasting_provider.dart';
 
 class PersonalSettingsScreen extends ConsumerStatefulWidget {
   const PersonalSettingsScreen({super.key});
 
-  // Kompletna lista metod referencyjnych
   static const List<String> allMethods = [
     'V60', 'AeroPress', 'Chemex', 'French Press', 'Moka Pot', 
     'Espresso', 'Clever Dripper', 'Kalita Wave', 'Phin', 'Cold Brew'
@@ -17,30 +18,22 @@ class PersonalSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _PersonalSettingsScreenState extends ConsumerState<PersonalSettingsScreen> {
-  // Lokalne bufory stanu
   late List<String> _localActiveMethods;
-  late List<TextEditingController> _grinderControllers;
+  late List<String> _localGrinders;
 
   @override
   void initState() {
     super.initState();
-    // 1. Inicjalizacja bufora na podstawie aktualnego stanu z pamięci
     final prefs = ref.read(userPreferencesProvider);
     _localActiveMethods = List<String>.from(prefs.activeMethods);
     
-    _grinderControllers = List.generate(
-      3,
-      (index) => TextEditingController(text: prefs.grinders[index]),
-    );
-  }
-
-  @override
-  void dispose() {
-    // Sprzątanie kontrolerów po zamknięciu ekranu
-    for (var controller in _grinderControllers) {
-      controller.dispose();
+    _localGrinders = List<String>.from(prefs.grinders);
+    while (_localGrinders.length < 3) {
+      _localGrinders.add('');
     }
-    super.dispose();
+    if (_localGrinders.length > 3) {
+      _localGrinders = _localGrinders.sublist(0, 3);
+    }
   }
 
   void _toggleMethod(String method, bool isActive) {
@@ -53,46 +46,108 @@ class _PersonalSettingsScreenState extends ConsumerState<PersonalSettingsScreen>
     });
   }
 
-void _saveChanges() {
+  void _saveChanges() {
     final notifier = ref.read(userPreferencesProvider.notifier);
-    
-    // Zbieramy wpisane nazwy młynków, usuwając białe znaki na brzegach
-    final newGrinders = _grinderControllers.map((c) => c.text.trim()).toList();
-    
-    // Wypychamy bufor do głównego Providera i SharedPreferences
+    final newGrinders = _localGrinders.map((g) => g.trim()).toList();
     notifier.saveAllPreferences(_localActiveMethods, newGrinders);
-    
-    // Wymuszenie powrotu do Menu Głównego (Ekranu Powitalnego)
     context.push('/'); 
   }
 
   void _discardChanges() {
-    // Wymuszenie powrotu do Menu Głównego bez zapisu stanu
     context.push('/');
   }
 
   @override
   Widget build(BuildContext context) {
+    final grindersAsync = ref.watch(grindersDatabaseProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personal Settings'),
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 100.0), // Zapas na przyciski na dole
+        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 100.0), 
         children: [
           const Text('YOUR GRINDERS (MAX 3)', style: TextStyle(color: Color(0xFFC27D56), fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 12),
+          
           ...List.generate(3, (index) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
-              child: TextField(
-                controller: _grinderControllers[index],
-                decoration: InputDecoration(
-                  labelText: 'Grinder ${index + 1}',
-                  hintText: 'e.g. Comandante C40',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
+              child: grindersAsync.when(
+                loading: () => const LinearProgressIndicator(color: Color(0xFFC27D56)),
+                error: (err, stack) => Text('Error loading DB: $err', style: const TextStyle(color: Colors.red)),
+                data: (grinders) {
+                  return Autocomplete<GrinderModel>(
+                    initialValue: TextEditingValue(text: _localGrinders[index]),
+                    displayStringForOption: (option) => option.fullName,
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) return grinders;
+                      return grinders.where((g) => g.fullName.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                    },
+                    onSelected: (selection) {
+                      _localGrinders[index] = selection.fullName;
+                      FocusManager.instance.primaryFocus?.unfocus(); 
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        decoration: InputDecoration(
+                          labelText: 'Grinder ${index + 1}',
+                          hintText: 'Click to select or type...',
+                          hintStyle: const TextStyle(color: Colors.white38),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Color(0xFFC27D56), width: 1.5),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1A18),
+                          prefixIcon: const Icon(Icons.hardware, color: Colors.grey, size: 20),
+                          suffixIcon: const Icon(Icons.arrow_drop_down, color: Color(0xFFC27D56), size: 28),
+                        ),
+                        onChanged: (val) {
+                          _localGrinders[index] = val;
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final optionsList = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 8,
+                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFF231F1C),
+                          // INŻYNIERIA BŁĘDU: Sztywne ograniczenie wysokości zapobiega awarii renderowania
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 250),
+                            child: SizedBox(
+                              width: MediaQuery.of(context).size.width - 32, 
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: optionsList.length,
+                                itemBuilder: (context, i) {
+                                  final option = optionsList[i];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.fullName, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                    subtitle: Text('${option.stepMicron} µm / click', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                    onTap: () => onSelected(option),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  );
+                }
               ),
             );
           }),
@@ -108,7 +163,6 @@ void _saveChanges() {
             ),
             child: Column(
               children: PersonalSettingsScreen.allMethods.map((method) {
-                // Czytamy z LOKALNEGO bufora, a nie z Providera
                 final isActive = _localActiveMethods.contains(method);
                 return CheckboxListTile(
                   title: Text(method, style: const TextStyle(color: Colors.white)),
@@ -125,18 +179,16 @@ void _saveChanges() {
           ),
         ],
       ),
-      // Kontener z przyciskami przypięty do dołu ekranu
-// Kontener z przyciskami przypięty do dołu ekranu
       bottomSheet: Container(
         padding: const EdgeInsets.all(16.0),
-        color: Theme.of(context).scaffoldBackgroundColor, // Zlewa się z tłem
+        color: Theme.of(context).scaffoldBackgroundColor, 
         child: Row(
           children: [
             Expanded(
               child: OutlinedButton(
                 onPressed: _discardChanges,
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12), // Zmniejszony padding pionowy dla 2 linii tekstu
+                  padding: const EdgeInsets.symmetric(vertical: 12), 
                   side: const BorderSide(color: Colors.grey),
                 ),
                 child: const Text(
@@ -146,12 +198,12 @@ void _saveChanges() {
                 ),
               ),
             ),
-            const SizedBox(width: 12), // Delikatnie węższy odstęp
+            const SizedBox(width: 12), 
             Expanded(
               child: ElevatedButton(
                 onPressed: _saveChanges,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFC27D56), // Nasz akcent
+                  backgroundColor: const Color(0xFFC27D56), 
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: const Text(
@@ -163,6 +215,7 @@ void _saveChanges() {
             ),
           ],
         ),
-      ),    );
+      ),
+    );
   }
 }

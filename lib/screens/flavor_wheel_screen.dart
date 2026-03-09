@@ -171,7 +171,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           double parentSweepAngle = (2 * math.pi) / mainFlavorCategories.length;
           double parentMiddleAngle = -math.pi / 2 + (_tempMainIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
-          totalSweepAngle = 160 * (math.pi / 180);
+          totalSweepAngle = 180 * (math.pi / 180);
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
         // Faza 3: Specyfika (Poziom 3)
@@ -187,7 +187,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           // Obliczanie położenia okna wycinka z poprzedniego poziomu
           double grandParentSweep = (2 * math.pi) / mainFlavorCategories.length;
           double grandParentMiddle = -math.pi / 2 + (_tempMainIndex! * grandParentSweep) + (grandParentSweep / 2);
-          double prevTotalSweep = 160 * (math.pi / 180);
+          double prevTotalSweep = 180 * (math.pi / 180);
           double prevBaseStart = grandParentMiddle - (prevTotalSweep / 2);
           
           int oldSubListLength = subMap.keys.length + 1; // +1 dla "Overall"
@@ -195,7 +195,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           double parentMiddleAngle = prevBaseStart + (_tempSubIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
           // Węższy wycinek dla 3. poziomu
-          totalSweepAngle = 100 * (math.pi / 180); 
+          totalSweepAngle = 160 * (math.pi / 180); 
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
 
