@@ -45,5 +45,6 @@
   { "brand": "Malwani", "model": "Livi", "step_micron": 5.0 },
   { "brand": "Hario", "model": "Skerton Pro", "step_micron": 110.0 },
   { "brand": "Handground", "model": "Precision Coffee Grinder", "step_micron": 80.0 },
-  { "brand": "Normcore", "model": "V2", "step_micron": 25.0 }
+  { "brand": "Normcore", "model": "V2", "step_micron": 25.0 },
+  { "brand": "1Zpresso", "model": "ZP6 Special", "step_micron": 22.0 }
 ]
