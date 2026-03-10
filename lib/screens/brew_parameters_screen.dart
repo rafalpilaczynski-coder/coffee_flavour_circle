@@ -18,6 +18,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
   late TextEditingController _coffeeController;
   late TextEditingController _grinderSettingController;
   late TextEditingController _beanDetailsController;
+  late TextEditingController _drawdownController; // Kontroler dla czasu parzenia
 
   @override
   void initState() {
@@ -26,6 +27,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     _coffeeController = TextEditingController(text: initialState.coffeeName);
     _grinderSettingController = TextEditingController(text: initialState.grinderSetting);
     _beanDetailsController = TextEditingController(text: initialState.beanDetails);
+    _drawdownController = TextEditingController(text: initialState.drawdownTime);
   }
 
   @override
@@ -33,6 +35,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     _coffeeController.dispose();
     _grinderSettingController.dispose();
     _beanDetailsController.dispose();
+    _drawdownController.dispose();
     super.dispose();
   }
 
@@ -95,17 +98,13 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. ODCZYT DANYCH STANOWYCH
     final tastingData = ref.watch(tastingProvider);
     final notifier = ref.read(tastingProvider.notifier);
     final userPrefs = ref.watch(userPreferencesProvider);
     
     final asyncRoasteries = ref.watch(combinedRoasteriesProvider);
-    
-    // INŻYNIERIA BAZY DANYCH: Pobieranie bazy młynków i kalkulacja mnożnika
     final grindersAsync = ref.watch(grindersDatabaseProvider);
 
-    // 2. LOGIKA MŁYNKÓW I METOD
     final activeMethods = userPrefs.activeMethods.isNotEmpty ? userPrefs.activeMethods : ['V60'];
     final selectedMethod = activeMethods.contains(tastingData.method) ? tastingData.method : activeMethods.first;
 
@@ -122,7 +121,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
       });
     }
 
-    // Wyciąganie mnożnika na bazie wybranego młynka (0.0 jeśli nie ma go w bazie)
     final activeGrinderModel = grindersAsync.value?.where((g) => g.fullName == selectedGrinder).firstOrNull;
     final double activeMultiplier = activeGrinderModel?.stepMicron ?? 0.0;
 
@@ -152,30 +150,29 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final ratio = dose > 0 ? (water / dose) : 0.0;
     final isOutlier = dose > 0 && water > 0 && (ratio < 12.0 || ratio > 20.0);
 
-    // 3. RENDEROWANIE EKRANU Z ZABEZPIECZENIEM ASYNCHRONICZNYM
     return Scaffold(
       appBar: AppBar(
         title: const Text('Brew Parameters', style: TextStyle(fontSize: 18)), 
         centerTitle: true,
         toolbarHeight: 48,
       ),
-        body: SafeArea(
-          child: asyncRoasteries.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error: $err')),
-            data: (roasteries) {
-              return SingleChildScrollView( 
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+      body: SafeArea(
+        child: asyncRoasteries.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, stack) => Center(child: Text('Error: $err')),
+          data: (roasteries) {
+            return SingleChildScrollView( 
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Card(
                     margin: EdgeInsets.zero,
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
                       child: Column(
                         children: [
-Row(
+                          Row(
                             children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
@@ -196,7 +193,7 @@ Row(
                                   decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
                                   items: activeGrinders.map((g) => DropdownMenuItem(
                                     value: g, 
-                                    child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)) // Zmniejszono czcionkę dla długich nazw
+                                    child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white))
                                   )).toList(),
                                   onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
                                 ),
@@ -226,7 +223,6 @@ Row(
                                     hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                                    // DYNAMICZNY KALKULATOR MIKROMETRÓW
                                     suffixIcon: activeMultiplier > 0 
                                       ? Padding(
                                           padding: const EdgeInsets.only(right: 8.0),
@@ -269,34 +265,33 @@ Row(
 
                   const SizedBox(height: 12),
 
-                   Card(
-                      margin: EdgeInsets.zero,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            SliderWithTextInput(
-                              label: 'Temp', value: tastingData.temperature, min: 80, max: 100, divisions: 200, suffix: '°C', color: Colors.blue,
-                              onChanged: (val) => notifier.updateTemperature(val),
-                            ),
-                            SliderWithTextInput(
-                              label: 'Yield', value: tastingData.waterVolume, min: 50, max: 1000, divisions: 950, suffix: 'ml', color: Colors.lightBlueAccent,
-                              onChanged: (val) => notifier.updateWaterVolume(val),
-                            ),
-                            SliderWithTextInput(
-                              label: 'Dose', value: tastingData.dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
-                              onChanged: (val) => notifier.updateDose(val),
-                            ),
-
-                            Text(
-                              'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
-                            ),
-                          ],
-                        ),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SliderWithTextInput(
+                            label: 'Temp', value: tastingData.temperature, min: 80, max: 100, divisions: 200, suffix: '°C', color: Colors.blue,
+                            onChanged: (val) => notifier.updateTemperature(val),
+                          ),
+                          SliderWithTextInput(
+                            label: 'Yield', value: tastingData.waterVolume, min: 50, max: 1000, divisions: 950, suffix: 'ml', color: Colors.lightBlueAccent,
+                            onChanged: (val) => notifier.updateWaterVolume(val),
+                          ),
+                          SliderWithTextInput(
+                            label: 'Dose', value: tastingData.dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
+                            onChanged: (val) => notifier.updateDose(val),
+                          ),
+                          Text(
+                            'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
 
                   if (isOutlier)
                     Container(
@@ -321,7 +316,72 @@ Row(
                       ),
                     ),
 
-                  const SizedBox(height: 12),
+                  // ==========================================
+                  // ZAAWANSOWANE OPCJE PARZENIA
+                  // ==========================================
+                  Card(
+                    margin: const EdgeInsets.only(top: 12.0, bottom: 12.0),
+                    child: ExpansionTile(
+                      collapsedIconColor: Colors.amber,
+                      iconColor: Colors.amber,
+                      title: const Row(
+                        children: [
+                          Icon(Icons.science, size: 18, color: Colors.amber),
+                          SizedBox(width: 8),
+                          Text('ADVANCED BREWING OPTIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        ],
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: tastingData.recipe.isEmpty ? 'Custom' : tastingData.recipe,
+                                      dropdownColor: const Color(0xFF1E1A18),
+                                      decoration: const InputDecoration(labelText: 'Recipe / Technique', isDense: true),
+                                      items: ['Custom', 'James Hoffmann', 'Scott Rao', 'Tetsu Kasuya 4:6', 'Lance Hedrick', 'Osmotic Flow']
+                                          .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
+                                      onChanged: (val) { if (val != null) notifier.updateRecipe(val); },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: tastingData.filterType.isEmpty ? 'Paper (Bleached)' : tastingData.filterType,
+                                      dropdownColor: const Color(0xFF1E1A18),
+                                      decoration: const InputDecoration(labelText: 'Filter Type', isDense: true),
+                                      items: ['Paper (Bleached)', 'Paper (Unbleached)', 'Metal', 'Cloth (Nel)', 'Polymer (Sibarist)']
+                                          .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
+                                      onChanged: (val) { if (val != null) notifier.updateFilterType(val); },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _drawdownController,
+                                keyboardType: TextInputType.datetime,
+                                decoration: InputDecoration(
+                                  labelText: 'Total Drawdown Time',
+                                  hintText: 'e.g. 02:45',
+                                  hintStyle: const TextStyle(color: Colors.white24),
+                                  prefixIcon: const Icon(Icons.timer_outlined, color: Colors.grey, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onChanged: (val) => notifier.updateDrawdownTime(val),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   PrimaryActionButton(
                     label: 'NEXT: FRAGRANCE ANALYSIS',
                     onPressed: () => context.push('/fragrance'),

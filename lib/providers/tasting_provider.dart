@@ -23,7 +23,11 @@ class TastingState {
   final String grinderName;
   final String grinderSetting;
 
-  // INŻYNIERIA DANYCH: Rozszerzenie o 3. poziom (Specific)
+  // INŻYNIERIA DANYCH: Zaawansowane opcje parzenia
+  final String recipe;
+  final String filterType;
+  final String drawdownTime;
+
   final String primaryFlavorMain;
   final String primaryFlavorSub;
   final String primaryFlavorSpecific; 
@@ -52,12 +56,16 @@ class TastingState {
     this.grinderName = '',
     this.grinderSetting = '',
     
+    this.recipe = '',
+    this.filterType = '',
+    this.drawdownTime = '',
+    
     this.primaryFlavorMain = '',
     this.primaryFlavorSub = '',
-    this.primaryFlavorSpecific = '', // INICJALIZACJA
+    this.primaryFlavorSpecific = '', 
     this.secondaryFlavorMain = '',
     this.secondaryFlavorSub = '',
-    this.secondaryFlavorSpecific = '', // INICJALIZACJA
+    this.secondaryFlavorSpecific = '', 
     
     this.sweetness = 3.0, 
     this.acidity = 3.0,
@@ -81,12 +89,16 @@ class TastingState {
     String? grinderName,
     String? grinderSetting,
     
+    String? recipe,
+    String? filterType,
+    String? drawdownTime,
+    
     String? primaryFlavorMain,
     String? primaryFlavorSub,
-    String? primaryFlavorSpecific, // 3 POZIOM
+    String? primaryFlavorSpecific, 
     String? secondaryFlavorMain,
     String? secondaryFlavorSub,
-    String? secondaryFlavorSpecific, // 3 POZIOM
+    String? secondaryFlavorSpecific, 
     
     double? sweetness,
     double? acidity,
@@ -108,6 +120,10 @@ class TastingState {
       temperature: temperature ?? this.temperature,
       grinderName: grinderName ?? this.grinderName,
       grinderSetting: grinderSetting ?? this.grinderSetting,
+      
+      recipe: recipe ?? this.recipe,
+      filterType: filterType ?? this.filterType,
+      drawdownTime: drawdownTime ?? this.drawdownTime,
       
       primaryFlavorMain: primaryFlavorMain ?? this.primaryFlavorMain,
       primaryFlavorSub: primaryFlavorSub ?? this.primaryFlavorSub,
@@ -138,12 +154,15 @@ class TastingState {
       'temperature': temperature,
       'grinderName': grinderName,
       'grinderSetting': grinderSetting,
+      'recipe': recipe,
+      'filterType': filterType,
+      'drawdownTime': drawdownTime,
       'primaryFlavorMain': primaryFlavorMain,
       'primaryFlavorSub': primaryFlavorSub,
-      'primaryFlavorSpecific': primaryFlavorSpecific, // ZAPIS
+      'primaryFlavorSpecific': primaryFlavorSpecific, 
       'secondaryFlavorMain': secondaryFlavorMain,
       'secondaryFlavorSub': secondaryFlavorSub,
-      'secondaryFlavorSpecific': secondaryFlavorSpecific, // ZAPIS
+      'secondaryFlavorSpecific': secondaryFlavorSpecific, 
       'sweetness': sweetness,
       'acidity': acidity,
       'bitterness': bitterness,
@@ -174,6 +193,11 @@ class TastingNotifier extends Notifier<TastingState> {
   void updateGrinderName(String value) => state = state.copyWith(grinderName: value);
   void updateGrinderSetting(String value) => state = state.copyWith(grinderSetting: value);
 
+  // Aktualizacja zaawansowanych parametrów
+  void updateRecipe(String value) => state = state.copyWith(recipe: value);
+  void updateFilterType(String value) => state = state.copyWith(filterType: value);
+  void updateDrawdownTime(String value) => state = state.copyWith(drawdownTime: value);
+
   void toggleDryNote(String note) {
     final currentNotes = List<String>.from(state.dryNotes);
     if (currentNotes.contains(note)) {
@@ -196,7 +220,6 @@ class TastingNotifier extends Notifier<TastingState> {
   void updateDryNotes(List<String> value) => state = state.copyWith(dryNotes: value);
   void updateWetNotes(List<String> value) => state = state.copyWith(wetNotes: value);
 
-  // AKTUALIZACJA: Metody przyjmują teraz 3 argumenty (Main, Sub, Specific)
   void setPrimaryFlavor(String main, String sub, String specific) {
     state = state.copyWith(
       primaryFlavorMain: main, 
@@ -225,10 +248,10 @@ class TastingNotifier extends Notifier<TastingState> {
     state = state.copyWith(
       primaryFlavorMain: '',
       primaryFlavorSub: '',
-      primaryFlavorSpecific: '', // CZYSZCZENIE 3 POZIOMU
+      primaryFlavorSpecific: '', 
       secondaryFlavorMain: '',
       secondaryFlavorSub: '',
-      secondaryFlavorSpecific: '', // CZYSZCZENIE 3 POZIOMU
+      secondaryFlavorSpecific: '', 
     );
   }
 
@@ -287,28 +310,38 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
     final List<Map<String, dynamic>> sanitizedHistory = decoded.map((item) {
       final map = Map<String, dynamic>.from(item);
       
-      // MIGRACJA DANYCH WEJŚCIOWYCH
+      // MIGRACJA DANYCH WEJŚCIOWYCH Z ZAAWANSOWANYMI OPCJAMI
       map['beanDetails'] ??= '';
       map['notes'] ??= '';
       map['defects'] ??= [];
       map['dryNotes'] ??= [];
       map['wetNotes'] ??= [];
       
-      // Wstrzyknięcie braku 3. poziomu dla starych sesji
+      map['recipe'] ??= '';
+      map['filterType'] ??= '';
+      map['drawdownTime'] ??= '';
+      
       map['primaryFlavorSpecific'] ??= '';
       map['secondaryFlavorSpecific'] ??= '';
       
+      // Bezpieczna konwersja wartości
       for (var key in ['sweetness', 'acidity', 'bitterness']) {
-        double val = (map[key] ?? 3.0).toDouble();
-        if (val > 5.0) {
-          val = val / 2.0; 
+        if (map[key] != null) {
+          double val = (map[key] as num).toDouble();
+          if (val > 5.0) val = val / 2.0; 
+          map[key] = val.clamp(1.0, 5.0);
+        } else {
+          map[key] = 3.0;
         }
-        map[key] = val.clamp(1.0, 5.0);
       }
 
-      double enjoyment = (map['enjoyment'] ?? 3.0).toDouble();
-      if (enjoyment > 5.0) enjoyment = enjoyment / 2.0;
-      map['enjoyment'] = enjoyment.clamp(1.0, 5.0);
+      if (map['enjoyment'] != null) {
+        double enjoyment = (map['enjoyment'] as num).toDouble();
+        if (enjoyment > 5.0) enjoyment = enjoyment / 2.0;
+        map['enjoyment'] = enjoyment.clamp(1.0, 5.0);
+      } else {
+        map['enjoyment'] = 3.0;
+      }
       
       return map;
     }).toList();
@@ -429,10 +462,10 @@ class BackupService {
     return false; 
   }
 }
+
 // ==========================================
 // 5. BAZA MŁYNKÓW (GRINDERS DATABASE)
 // ==========================================
-
 class GrinderModel {
   final String brand;
   final String model;
