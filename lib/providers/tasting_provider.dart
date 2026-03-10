@@ -31,9 +31,14 @@ class TastingState {
   final String primaryFlavorMain;
   final String primaryFlavorSub;
   final String primaryFlavorSpecific; 
+
   final String secondaryFlavorMain;
   final String secondaryFlavorSub;
   final String secondaryFlavorSpecific; 
+
+  final String tertiaryFlavorMain;
+  final String tertiaryFlavorSub;
+  final String tertiaryFlavorSpecific; 
 
   final double sweetness;
   final double acidity;
@@ -63,9 +68,14 @@ class TastingState {
     this.primaryFlavorMain = '',
     this.primaryFlavorSub = '',
     this.primaryFlavorSpecific = '', 
+    
     this.secondaryFlavorMain = '',
     this.secondaryFlavorSub = '',
     this.secondaryFlavorSpecific = '', 
+
+    this.tertiaryFlavorMain = '',
+    this.tertiaryFlavorSub = '',
+    this.tertiaryFlavorSpecific = '', 
     
     this.sweetness = 3.0, 
     this.acidity = 3.0,
@@ -96,10 +106,15 @@ class TastingState {
     String? primaryFlavorMain,
     String? primaryFlavorSub,
     String? primaryFlavorSpecific, 
+
     String? secondaryFlavorMain,
     String? secondaryFlavorSub,
     String? secondaryFlavorSpecific, 
-    
+
+    String? tertiaryFlavorMain,
+    String? tertiaryFlavorSub,
+    String? tertiaryFlavorSpecific,
+
     double? sweetness,
     double? acidity,
     double? bitterness,
@@ -131,7 +146,10 @@ class TastingState {
       secondaryFlavorMain: secondaryFlavorMain ?? this.secondaryFlavorMain,
       secondaryFlavorSub: secondaryFlavorSub ?? this.secondaryFlavorSub,
       secondaryFlavorSpecific: secondaryFlavorSpecific ?? this.secondaryFlavorSpecific,
-      
+      tertiaryFlavorMain: tertiaryFlavorMain ?? this.tertiaryFlavorMain,
+      tertiaryFlavorSub: tertiaryFlavorSub ?? this.tertiaryFlavorSub, 
+      tertiaryFlavorSpecific: tertiaryFlavorSpecific ?? this.tertiaryFlavorSpecific,
+
       sweetness: sweetness ?? this.sweetness,
       acidity: acidity ?? this.acidity,
       bitterness: bitterness ?? this.bitterness,
@@ -236,6 +254,14 @@ class TastingNotifier extends Notifier<TastingState> {
     );
   }
   
+  void setTertiaryFlavor(String main, String sub, String specific) {
+      state = state.copyWith(
+        tertiaryFlavorMain: main, 
+        tertiaryFlavorSub: sub,
+        tertiaryFlavorSpecific: specific,
+      );
+    }
+
   void updatePrimaryFlavor(String main, String sub, String specific) {
     state = state.copyWith(
       primaryFlavorMain: main, 
@@ -288,6 +314,41 @@ class TastingNotifier extends Notifier<TastingState> {
     
     await prefs.setString('tasting_history', jsonEncode(history));
     state = const TastingState();
+  }
+
+  // INŻYNIERIA UX: Pozwala na usunięcie konkretnego zapisanego smaku (1, 2 lub 3)
+  // bez czyszczenia pozostałych.
+  void removeFlavor(int index) {
+    if (index == 1) {
+      // Jeśli usuwamy pierwszy, przesuwamy pozostałe "do góry"
+      state = state.copyWith(
+        primaryFlavorMain: state.secondaryFlavorMain,
+        primaryFlavorSub: state.secondaryFlavorSub,
+        primaryFlavorSpecific: state.secondaryFlavorSpecific,
+        secondaryFlavorMain: state.tertiaryFlavorMain,
+        secondaryFlavorSub: state.tertiaryFlavorSub,
+        secondaryFlavorSpecific: state.tertiaryFlavorSpecific,
+        tertiaryFlavorMain: '',
+        tertiaryFlavorSub: '',
+        tertiaryFlavorSpecific: '',
+      );
+    } else if (index == 2) {
+      // Jeśli usuwamy drugi, przesuwamy trzeci na miejsce drugiego
+      state = state.copyWith(
+        secondaryFlavorMain: state.tertiaryFlavorMain,
+        secondaryFlavorSub: state.tertiaryFlavorSub,
+        secondaryFlavorSpecific: state.tertiaryFlavorSpecific,
+        tertiaryFlavorMain: '',
+        tertiaryFlavorSub: '',
+        tertiaryFlavorSpecific: '',
+      );
+    } else if (index == 3) {
+      state = state.copyWith(
+        tertiaryFlavorMain: '',
+        tertiaryFlavorSub: '',
+        tertiaryFlavorSpecific: '',
+      );
+    }
   }
 }
 
@@ -403,11 +464,10 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
       final path = cat['icon'] as String;
       try {
         final ByteData data = await rootBundle.load(path);
-        final ui.Codec codec = await ui.instantiateImageCodec(
-          data.buffer.asUint8List(), 
-          targetWidth: 18, 
-          targetHeight: 18
-        );
+        // INŻYNIERIA WYDAJNOŚCI: Usunięto targetWidth/Height!
+        // Obraz ładuje się w pełnej rozdzielczości, a skalowaniem zajmie się 
+        // silnik antyaliasingu bezpośrednio na Canvasie, zachowując "brzytwę".
+        final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
         final ui.FrameInfo fi = await codec.getNextFrame();
         cache[path] = fi.image;
         debugPrint('Cache hit: $path');
@@ -418,7 +478,6 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
   }
   return cache;
 });
-
 // ==========================================
 // 4. MODUŁ ZARZĄDZANIA KOPIAMI ZAPASOWYMI
 // ==========================================

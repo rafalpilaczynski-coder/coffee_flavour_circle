@@ -8,7 +8,13 @@ import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
 
-enum WheelPhase { primaryMain, primarySub, primaryTertiary, secondaryMain, secondarySub, secondaryTertiary, completed }
+// INŻYNIERIA DANYCH: Rozszerzono maszynę stanów o trzeci poziom (Tertiary)
+enum WheelPhase { 
+  primaryMain, primarySub, primaryTertiary, 
+  secondaryMain, secondarySub, secondaryTertiary, 
+  tertiaryMain, tertiarySub, tertiaryTertiary, 
+  completed 
+}
 
 class FlavorWheelScreen extends ConsumerStatefulWidget {
   const FlavorWheelScreen({super.key});
@@ -26,8 +32,31 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
   String? _tempSubSelection;
   int? _tempSubIndex;
 
-  // Flaga do ponownego odpalania animacji wachlarza
   Key _animationKey = UniqueKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPhaseWithProvider());
+  }
+
+  // Synchronizuje interfejs z twardymi danymi w pamięci, aby uniknąć rozjazdów stanów
+  void _syncPhaseWithProvider() {
+    final data = ref.read(tastingProvider);
+    setState(() {
+      _resetTemps();
+      _animationKey = UniqueKey();
+      if (data.primaryFlavorMain.isEmpty) {
+        _currentPhase = WheelPhase.primaryMain;
+      } else if (data.secondaryFlavorMain.isEmpty) {
+        _currentPhase = WheelPhase.secondaryMain;
+      } else if (data.tertiaryFlavorMain.isEmpty) {
+        _currentPhase = WheelPhase.tertiaryMain;
+      } else {
+        _currentPhase = WheelPhase.completed;
+      }
+    });
+  }
 
   void _handleSegmentTap(String categoryName, int index) {
     final notifier = ref.read(tastingProvider.notifier);
@@ -37,29 +66,25 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
     }
 
     setState(() {
-      // Zmiana klucza wymusza restart TweenAnimationBuilder
       _animationKey = UniqueKey();
 
       switch (_currentPhase) {
+        // --- POZIOM 1 ---
         case WheelPhase.primaryMain:
           _tempMainSelection = categoryName;
           _tempMainIndex = index;
           _currentPhase = WheelPhase.primarySub;
           break;
-          
         case WheelPhase.primarySub:
           if (categoryName.isEmpty || categoryName.startsWith('Overall')) {
              notifier.setPrimaryFlavor(_tempMainSelection!, '', '');
-             _resetTemps();
-             _currentPhase = WheelPhase.secondaryMain;
+             _syncPhaseWithProvider();
           } else {
-             final Map<String, List<String>> subMap = flavorTree[_tempMainSelection!]!['sub'];
-             final List<String> tertiaryList = subMap[categoryName] ?? [];
-             
+             final subMap = flavorTree[_tempMainSelection!]!['sub'] as Map<String, List<String>>;
+             final tertiaryList = subMap[categoryName] ?? [];
              if (tertiaryList.isEmpty) {
                 notifier.setPrimaryFlavor(_tempMainSelection!, categoryName, '');
-                _resetTemps();
-                _currentPhase = WheelPhase.secondaryMain;
+                _syncPhaseWithProvider();
              } else {
                 _tempSubSelection = categoryName;
                 _tempSubIndex = index;
@@ -67,32 +92,27 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
              }
           }
           break;
-          
         case WheelPhase.primaryTertiary:
           notifier.setPrimaryFlavor(_tempMainSelection!, _tempSubSelection!, categoryName);
-          _resetTemps();
-          _currentPhase = WheelPhase.secondaryMain;
+          _syncPhaseWithProvider();
           break;
 
+        // --- POZIOM 2 ---
         case WheelPhase.secondaryMain:
           _tempMainSelection = categoryName;
           _tempMainIndex = index;
           _currentPhase = WheelPhase.secondarySub;
           break;
-          
         case WheelPhase.secondarySub:
           if (categoryName.isEmpty || categoryName.startsWith('Overall')) {
              notifier.setSecondaryFlavor(_tempMainSelection!, '', '');
-             _resetTemps();
-             _currentPhase = WheelPhase.completed;
+             _syncPhaseWithProvider();
           } else {
-             final Map<String, List<String>> subMap = flavorTree[_tempMainSelection!]!['sub'];
-             final List<String> tertiaryList = subMap[categoryName] ?? [];
-             
+             final subMap = flavorTree[_tempMainSelection!]!['sub'] as Map<String, List<String>>;
+             final tertiaryList = subMap[categoryName] ?? [];
              if (tertiaryList.isEmpty) {
                 notifier.setSecondaryFlavor(_tempMainSelection!, categoryName, '');
-                _resetTemps();
-                _currentPhase = WheelPhase.completed;
+                _syncPhaseWithProvider();
              } else {
                 _tempSubSelection = categoryName;
                 _tempSubIndex = index;
@@ -100,11 +120,37 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
              }
           }
           break;
-          
         case WheelPhase.secondaryTertiary:
           notifier.setSecondaryFlavor(_tempMainSelection!, _tempSubSelection!, categoryName);
-          _resetTemps();
-          _currentPhase = WheelPhase.completed;
+          _syncPhaseWithProvider();
+          break;
+
+        // --- POZIOM 3 ---
+        case WheelPhase.tertiaryMain:
+          _tempMainSelection = categoryName;
+          _tempMainIndex = index;
+          _currentPhase = WheelPhase.tertiarySub;
+          break;
+        case WheelPhase.tertiarySub:
+          if (categoryName.isEmpty || categoryName.startsWith('Overall')) {
+             notifier.setTertiaryFlavor(_tempMainSelection!, '', '');
+             _syncPhaseWithProvider();
+          } else {
+             final subMap = flavorTree[_tempMainSelection!]!['sub'] as Map<String, List<String>>;
+             final specificList = subMap[categoryName] ?? [];
+             if (specificList.isEmpty) {
+                notifier.setTertiaryFlavor(_tempMainSelection!, categoryName, '');
+                _syncPhaseWithProvider();
+             } else {
+                _tempSubSelection = categoryName;
+                _tempSubIndex = index;
+                _currentPhase = WheelPhase.tertiaryTertiary;
+             }
+          }
+          break;
+        case WheelPhase.tertiaryTertiary:
+          notifier.setTertiaryFlavor(_tempMainSelection!, _tempSubSelection!, categoryName);
+          _syncPhaseWithProvider();
           break;
           
         case WheelPhase.completed:
@@ -120,13 +166,14 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
     _tempSubIndex = null;
   }
 
-  void _resetWheel() {
-    ref.read(tastingProvider.notifier).clearAllFlavors();
-    setState(() {
-      _currentPhase = WheelPhase.primaryMain;
-      _resetTemps();
-      _animationKey = UniqueKey();
-    });
+  // INŻYNIERIA UX: Funkcja cofa tylko obecną, niedokończoną ścieżkę.
+  void _undoCurrentPath() {
+    _syncPhaseWithProvider();
+  }
+
+  void _removeFlavorRecord(int index) {
+    ref.read(tastingProvider.notifier).removeFlavor(index);
+    _syncPhaseWithProvider();
   }
 
   @override
@@ -143,13 +190,17 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
         double baseStartAngle = -math.pi / 2;
         double totalSweepAngle = 2 * math.pi;
 
-        if (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain) {
+        bool isMainPhase = _currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain || _currentPhase == WheelPhase.tertiaryMain;
+        bool isSubPhase = _currentPhase == WheelPhase.primarySub || _currentPhase == WheelPhase.secondarySub || _currentPhase == WheelPhase.tertiarySub;
+        bool isTertiaryPhase = _currentPhase == WheelPhase.primaryTertiary || _currentPhase == WheelPhase.secondaryTertiary || _currentPhase == WheelPhase.tertiaryTertiary;
+
+        if (isMainPhase) {
           activeCategories = mainFlavorCategories; 
         } 
-        else if ((_currentPhase == WheelPhase.primarySub || _currentPhase == WheelPhase.secondarySub) && _tempMainSelection != null && _tempMainIndex != null) {
+        else if (isSubPhase && _tempMainSelection != null && _tempMainIndex != null) {
           final treeNode = flavorTree[_tempMainSelection];
           if (treeNode == null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _resetWheel());
+            WidgetsBinding.instance.addPostFrameCallback((_) => _undoCurrentPath());
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
 
@@ -167,7 +218,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           totalSweepAngle = 160 * (math.pi / 180);
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
-        else if ((_currentPhase == WheelPhase.primaryTertiary || _currentPhase == WheelPhase.secondaryTertiary) && _tempMainSelection != null && _tempSubSelection != null) {
+        else if (isTertiaryPhase && _tempMainSelection != null && _tempSubSelection != null) {
           final parentColor = flavorTree[_tempMainSelection!]!['color'] as Color;
           final Map<String, List<String>> subMap = flavorTree[_tempMainSelection!]!['sub'];
           final List<String> specificList = List.from(subMap[_tempSubSelection] ?? []);
@@ -185,7 +236,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           double parentSweepAngle = prevTotalSweep / oldSubListLength;
           double parentMiddleAngle = prevBaseStart + (_tempSubIndex! * parentSweepAngle) + (parentSweepAngle / 2);
 
-          // Półkole dla 3 poziomu (180 stopni)
           totalSweepAngle = 180 * (math.pi / 180); 
           baseStartAngle = parentMiddleAngle - (totalSweepAngle / 2);
         }
@@ -194,16 +244,25 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           appBar: AppBar(
             title: const Text('Flavor Wheel'), 
             centerTitle: true,
-            actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _resetWheel)],
+            // Ikona strzałki wstecz, która cofa tylko obecną ścieżkę
+            actions: [
+              if (!isMainPhase && _currentPhase != WheelPhase.completed)
+                IconButton(
+                  icon: const Icon(Icons.undo), 
+                  tooltip: 'Reset current path',
+                  onPressed: _undoCurrentPath,
+                )
+            ],
           ),
           body: Column(
             children: [
               const SizedBox(height: 20),
               Text(
-                _currentPhase.name.contains('Tertiary') ? "Select specific note" : "Follow the flavor path", 
+                _currentPhase == WheelPhase.completed ? "Maximum flavors selected" :
+                isTertiaryPhase ? "Select specific note" : "Follow the flavor path", 
                 style: const TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.w600, letterSpacing: 0.5)
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               
               Center(
                 child: _currentPhase == WheelPhase.completed 
@@ -217,7 +276,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                         double dx = details.localPosition.dx - centerOffset;
                         double dy = details.localPosition.dy - centerOffset;
 
-                        // Większy martwy punkt w środku koła, by uniknąć przypadkowych kliknięć
                         if (math.sqrt(dx * dx + dy * dy) < centerOffset * 0.35) return; 
 
                         double touchAngle = math.atan2(dy, dx);
@@ -230,7 +288,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                           _handleSegmentTap(activeCategories[index]['name'], index);
                         }
                       },
-                      // INŻYNIERIA PŁYNNOŚCI: Płynne, fizyczne "rozwijanie" wachlarza
                       child: TweenAnimationBuilder<double>(
                         key: _animationKey,
                         tween: Tween<double>(begin: 0.0, end: 1.0),
@@ -243,9 +300,9 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
                               categories: activeCategories,
                               baseStartAngle: baseStartAngle,
                               totalSweepAngle: totalSweepAngle,
-                              animMultiplier: animValue, // Przekazanie stanu animacji do silnika
+                              animMultiplier: animValue, 
                               loadedIcons: loadedIcons,
-                              isInnerWheel: (_currentPhase == WheelPhase.primaryMain || _currentPhase == WheelPhase.secondaryMain)
+                              isInnerWheel: isMainPhase
                             ),
                           );
                         },
@@ -255,48 +312,26 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
               
               const Spacer(),
               
-              if (tastingData.primaryFlavorMain.isNotEmpty) 
-                Padding(
+              // SEKCJA WYBRANYCH SMAKÓW (Maksymalnie 3)
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Card(
-                    color: Colors.blueGrey.withValues(alpha: 0.2),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-                    child: ListTile(
-                      title: const Text('Primary Flavor', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                      subtitle: Text(
-                        '${tastingData.primaryFlavorMain}'
-                        '${tastingData.primaryFlavorSub.isNotEmpty ? " ➔ ${tastingData.primaryFlavorSub}" : ""}'
-                        '${tastingData.primaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.primaryFlavorSpecific}" : ""}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
-                      ),
-                      leading: const Icon(Icons.star, color: Colors.amber),
-                    ),
+                  child: Column(
+                    children: [
+                      if (tastingData.primaryFlavorMain.isNotEmpty) 
+                        _buildFlavorCard('Primary Flavor', tastingData.primaryFlavorMain, tastingData.primaryFlavorSub, tastingData.primaryFlavorSpecific, Icons.star, Colors.amber, () => _removeFlavorRecord(1)),
+                      if (tastingData.secondaryFlavorMain.isNotEmpty)
+                        _buildFlavorCard('Secondary Flavor', tastingData.secondaryFlavorMain, tastingData.secondaryFlavorSub, tastingData.secondaryFlavorSpecific, Icons.star_half, Colors.amberAccent, () => _removeFlavorRecord(2)),
+                      if (tastingData.tertiaryFlavorMain.isNotEmpty)
+                        _buildFlavorCard('Tertiary Flavor', tastingData.tertiaryFlavorMain, tastingData.tertiaryFlavorSub, tastingData.tertiaryFlavorSpecific, Icons.star_border, Colors.amber.shade200, () => _removeFlavorRecord(3)),
+                    ],
                   ),
                 ),
-              
-              if (tastingData.secondaryFlavorMain.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Card(
-                    color: Colors.blueGrey.withValues(alpha: 0.2),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-                    child: ListTile(
-                      title: const Text('Secondary Flavor', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                      subtitle: Text(
-                        '${tastingData.secondaryFlavorMain}'
-                        '${tastingData.secondaryFlavorSub.isNotEmpty ? " ➔ ${tastingData.secondaryFlavorSub}" : ""}'
-                        '${tastingData.secondaryFlavorSpecific.isNotEmpty ? " ➔ ${tastingData.secondaryFlavorSpecific}" : ""}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
-                      ),
-                      leading: const Icon(Icons.star_half, color: Colors.amberAccent),
-                    ),
-                  ),
-                ),
+              ),
               
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.all(16.0),
                 child: PrimaryActionButton(
                   label: 'NEXT: FINAL EVALUATION',
                   onPressed: () => context.push('/evaluation'),
@@ -306,6 +341,32 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFlavorCard(String title, String main, String sub, String specific, IconData icon, Color color, VoidCallback onDelete) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Card(
+        color: Colors.blueGrey.withValues(alpha: 0.2),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+        child: ListTile(
+          title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          subtitle: Text(
+            '$main'
+            '${sub.isNotEmpty ? " ➔ $sub" : ""}'
+            '${specific.isNotEmpty ? " ➔ $specific" : ""}',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+          ),
+          leading: Icon(icon, color: color),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+            onPressed: onDelete,
+            tooltip: 'Remove this note',
+          ),
+        ),
+      ),
     );
   }
 }
@@ -335,21 +396,16 @@ class WheelPainter extends CustomPainter {
     final radius = size.width / 2;
     final rect = Rect.fromCircle(center: center, radius: radius);
     
-    // Używamy z mnożnikiem animacji
     final double sweepAngle = (totalSweepAngle / categories.length) * animMultiplier;
     double currentAngle = baseStartAngle;
 
     for (var cat in categories) {
       final Color baseColor = cat['color'];
       
-      // INŻYNIERIA ESTETYKI 1: Miękki RadialGradient zamiast płaskiego koloru
       final gradient = RadialGradient(
         center: Alignment.center,
         radius: 1.0,
-        colors: [
-          baseColor.withValues(alpha: 0.7), // Jaśniejszy środek
-          baseColor, // Głęboki kolor na krawędziach
-        ],
+        colors: [baseColor.withValues(alpha: 0.7), baseColor],
       ).createShader(rect);
 
       final paint = Paint()
@@ -358,17 +414,15 @@ class WheelPainter extends CustomPainter {
       
       canvas.drawArc(rect, currentAngle, sweepAngle, true, paint);
       
-      // INŻYNIERIA ESTETYKI 2: Przestrzeń negatywowa (grube linie w kolorze tła zamiast czarnych ramek)
       final borderPaint = Paint()
-        ..color = const Color(0xFF121212) // Kolor tła aplikacji (Twój Scaffold background)
+        ..color = const Color(0xFF121212) 
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.5; 
         
       canvas.drawArc(rect, currentAngle, sweepAngle, true, borderPaint);
 
-      // Renderowanie zawartości wycinka z efektem Fade-In powiązanym z animacją
       if (animMultiplier > 0.5) {
-        final opacity = (animMultiplier - 0.5) * 2; // Od 0 do 1 w drugiej połowie animacji
+        final opacity = (animMultiplier - 0.5) * 2; 
         
         if (isInnerWheel && cat.containsKey('icon') && loadedIcons.containsKey(cat['icon'])) {
            _drawIconAndText(canvas, center, radius, currentAngle, sweepAngle, cat['name'], loadedIcons[cat['icon']]!, opacity);
@@ -380,14 +434,12 @@ class WheelPainter extends CustomPainter {
       currentAngle += sweepAngle;
     }
 
-    // Środek koła wycięty przestrzenią negatywową
     canvas.drawCircle(center, radius * 0.28, Paint()..color = const Color(0xFF121212));
   }
 
   void _drawIconAndText(Canvas canvas, Offset center, double radius, double startAngle, double sweepAngle, String text, ui.Image image, double opacity) {
     final double midAngle = startAngle + (sweepAngle / 2);
     
-    // Rysowanie Ikony
     final double iconRadius = radius * 0.82; 
     final double imgX = center.dx + iconRadius * math.cos(midAngle);
     final double imgY = center.dy + iconRadius * math.sin(midAngle);
@@ -397,14 +449,20 @@ class WheelPainter extends CustomPainter {
     double rotation = midAngle + math.pi / 2;
     canvas.rotate(rotation);
 
-    // INŻYNIERIA ESTETYKI 3: Białe ikony z lekką przezroczystością
+    // INŻYNIERIA WYDAJNOŚCI I JAKOŚCI: Downsampling przez drawImageRect.
+    // Zamiast rysować obraz bezpośrednio w 100% i liczyć na skalowanie matrycy, 
+    // alokujemy docelowy prostokąt i wymuszamy na GPU antyaliasing interpolowany (FilterQuality.high).
+    final double targetSize = radius * 0.22; // Dynamiczny rozmiar ikony zależny od ekranu
+    final Rect srcRect = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+    final Rect dstRect = Rect.fromCenter(center: Offset.zero, width: targetSize, height: targetSize);
+
     final paint = Paint()
+      ..filterQuality = FilterQuality.high // Wymusza ostrość pikseli
       ..colorFilter = ColorFilter.mode(Colors.white.withValues(alpha: 0.85 * opacity), BlendMode.srcIn);
 
-    canvas.drawImage(image, Offset(-image.width / 2, -image.height / 2), paint);
+    canvas.drawImageRect(image, srcRect, dstRect, paint);
     canvas.restore();
 
-    // Rysowanie Tekstu niżej
     _drawText(canvas, center, radius, startAngle, sweepAngle, text, 0.52, opacity);
   }
 
@@ -433,7 +491,6 @@ class WheelPainter extends CustomPainter {
         fontWeight: FontWeight.w700,
         letterSpacing: 0.5,
         height: 1.1,
-        // INŻYNIERIA ESTETYKI 4: Miękki, rozproszony cień ułatwiający czytanie
         shadows: [
           Shadow(color: Colors.black.withValues(alpha: 0.8 * opacity), blurRadius: 4, offset: const Offset(0, 1.5)),
         ],
