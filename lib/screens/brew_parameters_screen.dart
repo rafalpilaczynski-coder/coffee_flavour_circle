@@ -345,6 +345,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                   Card(
                     margin: const EdgeInsets.only(top: 12.0, bottom: 12.0),
                     child: ExpansionTile(
+                      shape: const Border(), // USUWA BIAŁE LINIE PO ROZWINIĘCIU
+                      collapsedShape: const Border(), // ZABEZPIECZA STAN ZWINIĘTY
                       collapsedIconColor: Colors.amber,
                       iconColor: Colors.amber,
                       title: const Row(
@@ -390,21 +392,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                     ],
                                   );
                                 }
-                              ),
-                              const SizedBox(height: 12),
-                              // TextField kontroluje się sam, nie wymaga nasłuchiwania w Consumer
-                              TextField(
-                                controller: _drawdownController,
-                                keyboardType: TextInputType.datetime,
-                                decoration: InputDecoration(
-                                  labelText: 'Total Drawdown Time',
-                                  hintText: 'e.g. 02:45',
-                                  hintStyle: const TextStyle(color: Colors.white24),
-                                  prefixIcon: const Icon(Icons.timer_outlined, color: Colors.grey, size: 20),
-                                  isDense: true,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                onChanged: (val) => notifier.updateDrawdownTime(val),
                               ),
                             ],
                           ),

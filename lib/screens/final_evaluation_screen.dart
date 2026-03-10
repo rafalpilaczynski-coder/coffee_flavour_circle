@@ -16,21 +16,20 @@ class FinalEvaluationScreen extends ConsumerStatefulWidget {
 
 class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
   late TextEditingController _notesController;
-
-  // Lista najczęstszych defektów (SCA)
-  final List<String> _commonDefects = [
-    'Taint', 'Fault', 'Sour', 'Quaker', 'Astringent', 'Woody', 'Papery', 'Musty'
-  ];
+  late TextEditingController _drawdownController; // INŻYNIERIA UX: Dodano kontroler czasu
 
   @override
   void initState() {
     super.initState();
-    _notesController = TextEditingController(text: ref.read(tastingProvider).notes);
+    final initialState = ref.read(tastingProvider);
+    _notesController = TextEditingController(text: initialState.notes);
+    _drawdownController = TextEditingController(text: initialState.drawdownTime);
   }
 
   @override
   void dispose() {
     _notesController.dispose();
+    _drawdownController.dispose();
     super.dispose();
   }
 
@@ -147,44 +146,37 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
             
             const SizedBox(height: 32),
             
-            // 3. DEFEKTY
+            // 3. WYNIKI PROCESU (Drawdown Time) - Zastępuje SCA Defects
             const Padding(
               padding: EdgeInsets.only(left: 8.0, bottom: 16.0),
               child: Text(
-                'SCA DEFECTS & TAINTS (OPTIONAL)', 
+                'EXTRACTION METRICS', 
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: appTextSecondary, letterSpacing: 1.5)
               ),
             ),
-            
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              color: appSurface,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Wrap(
-                    spacing: 8.0,
-                    runSpacing: 8.0,
-                    children: _commonDefects.map((defect) {
-                      final isSelected = tastingData.defects.contains(defect);
-                      return FilterChip(
-                        label: Text(defect, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.white70)),
-                        selected: isSelected,
-                        selectedColor: Colors.redAccent.shade700.withValues(alpha: 0.6),
-                        checkmarkColor: Colors.white,
-                        backgroundColor: const Color(0xFF1E1A18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: isSelected ? Colors.redAccent : Colors.white10),
-                        ),
-                        onSelected: (bool selected) {
-                          notifier.toggleDefect(defect);
-                        },
-                      );
-                    }).toList(),
-                  ),
+
+            TextField(
+              controller: _drawdownController,
+              keyboardType: TextInputType.datetime,
+              onChanged: (val) => notifier.updateDrawdownTime(val),
+              decoration: InputDecoration(
+                labelText: 'Total Drawdown Time (Czas całkowity)',
+                hintText: 'e.g. 02:45',
+                hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic),
+                prefixIcon: const Icon(Icons.timer_outlined, color: Colors.grey),
+                filled: true,
+                fillColor: appSurface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.amber.shade700),
                 ),
               ),
             ),
