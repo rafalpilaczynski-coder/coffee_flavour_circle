@@ -18,11 +18,12 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
   late TextEditingController _coffeeController;
   late TextEditingController _grinderSettingController;
   late TextEditingController _beanDetailsController;
-  late TextEditingController _drawdownController; // Kontroler dla czasu parzenia
+  late TextEditingController _drawdownController; 
 
   @override
   void initState() {
     super.initState();
+    // Inicjalizacja z jednorazowego odczytu (read) bez nasłuchiwania
     final initialState = ref.read(tastingProvider);
     _coffeeController = TextEditingController(text: initialState.coffeeName);
     _grinderSettingController = TextEditingController(text: initialState.grinderSetting);
@@ -98,24 +99,29 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tastingData = ref.watch(tastingProvider);
+    // INŻYNIERIA WYDAJNOŚCI: Wyciągamy na poziom główny tylko statyczne zależności.
+    // Usunięto nasłuchiwanie całego tastingProvider.
     final notifier = ref.read(tastingProvider.notifier);
     final userPrefs = ref.watch(userPreferencesProvider);
     
     final asyncRoasteries = ref.watch(combinedRoasteriesProvider);
     final grindersAsync = ref.watch(grindersDatabaseProvider);
 
+    // .select() izoluje przebudowę - ten fragment uruchomi się ponownie tylko, jeśli zmienisz method lub grinderName
+    final methodFromState = ref.watch(tastingProvider.select((s) => s.method));
+    final grinderNameFromState = ref.watch(tastingProvider.select((s) => s.grinderName));
+
     final activeMethods = userPrefs.activeMethods.isNotEmpty ? userPrefs.activeMethods : ['V60'];
-    final selectedMethod = activeMethods.contains(tastingData.method) ? tastingData.method : activeMethods.first;
+    final selectedMethod = activeMethods.contains(methodFromState) ? methodFromState : activeMethods.first;
 
     final activeGrinders = userPrefs.grinders.where((g) => g.trim().isNotEmpty).toList();
     final defaultGrinder = activeGrinders.isNotEmpty ? activeGrinders.first : '';
     
-    final selectedGrinder = (tastingData.grinderName.isEmpty && defaultGrinder.isNotEmpty) 
+    final selectedGrinder = (grinderNameFromState.isEmpty && defaultGrinder.isNotEmpty) 
         ? defaultGrinder 
-        : tastingData.grinderName;
+        : grinderNameFromState;
 
-    if (tastingData.grinderName != selectedGrinder) {
+    if (grinderNameFromState != selectedGrinder) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         notifier.updateGrinderName(selectedGrinder);
       });
@@ -144,11 +150,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     final hintText = (lastSetting != null && lastSetting.isNotEmpty) 
         ? 'last: $lastSetting' 
         : 'e.g. 96';
-
-    final dose = tastingData.dose;
-    final water = tastingData.waterVolume;
-    final ratio = dose > 0 ? (water / dose) : 0.0;
-    final isOutlier = dose > 0 && water > 0 && (ratio < 12.0 || ratio > 20.0);
 
     return Scaffold(
       appBar: AppBar(
@@ -187,7 +188,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: DropdownButtonFormField<String>(
-                                  initialValue: selectedGrinder,
+                                  initialValue: selectedGrinder.isEmpty ? null : selectedGrinder,
                                   dropdownColor: const Color(0xFF1E1A18),
                                   iconSize: 28,
                                   decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
@@ -207,7 +208,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                 child: _buildAutocompleteField(
                                   label: 'Roaster (Palarnia)', 
                                   options: roasteries, 
-                                  initialValue: tastingData.coffeeName,
+                                  initialValue: ref.read(tastingProvider).coffeeName, // Odczyt statyczny
                                   onSelected: (val) => notifier.updateCoffeeName(val),
                                   onChanged: (val) => notifier.updateCoffeeName(val),
                                 ),
@@ -224,22 +225,28 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                                     suffixIcon: activeMultiplier > 0 
-                                      ? Padding(
-                                          padding: const EdgeInsets.only(right: 8.0),
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                tastingData.grinderSetting.isNotEmpty && int.tryParse(tastingData.grinderSetting) != null
-                                                    ? '${(int.parse(tastingData.grinderSetting) * activeMultiplier).toInt()} µm'
-                                                    : '0 µm',
-                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                      ? Consumer(
+                                          // Izolacja aktualizacji mikrometrów (tylko ten mały widget odbudowuje się przy pisaniu)
+                                          builder: (context, ref, child) {
+                                            final settingStr = ref.watch(tastingProvider.select((s) => s.grinderSetting));
+                                            return Padding(
+                                              padding: const EdgeInsets.only(right: 8.0),
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    settingStr.isNotEmpty && int.tryParse(settingStr) != null
+                                                        ? '${(int.parse(settingStr) * activeMultiplier).toInt()} µm'
+                                                        : '0 µm',
+                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                                  ),
+                                                  const Text('Gap', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                                                ],
                                               ),
-                                              const Text('Gap', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                                            ],
-                                          ),
+                                            );
+                                          }
                                         )
                                       : null,
                                   ),
@@ -265,56 +272,72 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
                   const SizedBox(height: 12),
 
-                  Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          SliderWithTextInput(
-                            label: 'Temp', value: tastingData.temperature, min: 80, max: 100, divisions: 200, suffix: '°C', color: Colors.blue,
-                            onChanged: (val) => notifier.updateTemperature(val),
-                          ),
-                          SliderWithTextInput(
-                            label: 'Yield', value: tastingData.waterVolume, min: 50, max: 1000, divisions: 950, suffix: 'ml', color: Colors.lightBlueAccent,
-                            onChanged: (val) => notifier.updateWaterVolume(val),
-                          ),
-                          SliderWithTextInput(
-                            label: 'Dose', value: tastingData.dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
-                            onChanged: (val) => notifier.updateDose(val),
-                          ),
-                          Text(
-                            'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  // ==========================================
+                  // ZAMKNIĘTY BĄBEL DLA SUWAKÓW
+                  // ==========================================
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final dose = ref.watch(tastingProvider.select((s) => s.dose));
+                      final water = ref.watch(tastingProvider.select((s) => s.waterVolume));
+                      final temperature = ref.watch(tastingProvider.select((s) => s.temperature));
+                      final ratio = dose > 0 ? (water / dose) : 0.0;
+                      final isOutlier = dose > 0 && water > 0 && (ratio < 12.0 || ratio > 20.0);
 
-                  if (isOutlier)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8.0),
-                      padding: const EdgeInsets.all(8.0),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
+                      return Column(
                         children: [
-                          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Non-standard ratio (1:${ratio.toStringAsFixed(1)}). Optimal: 1:12 - 1:20.',
-                              style: const TextStyle(color: Colors.orange, fontSize: 11),
+                          Card(
+                            margin: EdgeInsets.zero,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  SliderWithTextInput(
+                                    label: 'Temp', value: temperature, min: 80, max: 100, divisions: 200, suffix: '°C', color: Colors.blue,
+                                    onChanged: (val) => notifier.updateTemperature(val),
+                                  ),
+                                  SliderWithTextInput(
+                                    label: 'Yield', value: water, min: 50, max: 1000, divisions: 950, suffix: 'ml', color: Colors.lightBlueAccent,
+                                    onChanged: (val) => notifier.updateWaterVolume(val),
+                                  ),
+                                  SliderWithTextInput(
+                                    label: 'Dose', value: dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
+                                    onChanged: (val) => notifier.updateDose(val),
+                                  ),
+                                  Text(
+                                    'Brew Ratio 1 : ${ratio.toStringAsFixed(1)}',
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
+                          if (isOutlier)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8.0),
+                              padding: const EdgeInsets.all(8.0),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.1),
+                                border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Non-standard ratio (1:${ratio.toStringAsFixed(1)}). Optimal: 1:12 - 1:20.',
+                                      style: const TextStyle(color: Colors.orange, fontSize: 11),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
-                      ),
-                    ),
+                      );
+                    }
+                  ),
 
                   // ==========================================
                   // ZAAWANSOWANE OPCJE PARZENIA
@@ -336,32 +359,40 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue: tastingData.recipe.isEmpty ? 'Custom' : tastingData.recipe,
-                                      dropdownColor: const Color(0xFF1E1A18),
-                                      decoration: const InputDecoration(labelText: 'Recipe / Technique', isDense: true),
-                                      items: ['Custom', 'James Hoffmann', 'Scott Rao', 'Tetsu Kasuya 4:6', 'Lance Hedrick', 'Osmotic Flow']
-                                          .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
-                                      onChanged: (val) { if (val != null) notifier.updateRecipe(val); },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue: tastingData.filterType.isEmpty ? 'Paper (Bleached)' : tastingData.filterType,
-                                      dropdownColor: const Color(0xFF1E1A18),
-                                      decoration: const InputDecoration(labelText: 'Filter Type', isDense: true),
-                                      items: ['Paper (Bleached)', 'Paper (Unbleached)', 'Metal', 'Cloth (Nel)', 'Polymer (Sibarist)']
-                                          .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
-                                      onChanged: (val) { if (val != null) notifier.updateFilterType(val); },
-                                    ),
-                                  ),
-                                ],
+                              // Dropdowny izolowane w Consumerze
+                              Consumer(
+                                builder: (context, ref, child) {
+                                  final recipe = ref.watch(tastingProvider.select((s) => s.recipe));
+                                  final filterType = ref.watch(tastingProvider.select((s) => s.filterType));
+                                  return Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          initialValue: recipe.isEmpty ? 'Custom' : recipe,
+                                          dropdownColor: const Color(0xFF1E1A18),
+                                          decoration: const InputDecoration(labelText: 'Recipe / Technique', isDense: true),
+                                          items: ['Custom', 'James Hoffmann', 'Scott Rao', 'Tetsu Kasuya 4:6', 'Lance Hedrick', 'Osmotic Flow']
+                                              .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
+                                          onChanged: (val) { if (val != null) notifier.updateRecipe(val); },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          initialValue: filterType.isEmpty ? 'Paper (Bleached)' : filterType,
+                                          dropdownColor: const Color(0xFF1E1A18),
+                                          decoration: const InputDecoration(labelText: 'Filter Type', isDense: true),
+                                          items: ['Paper (Bleached)', 'Paper (Unbleached)', 'Metal', 'Cloth (Nel)', 'Polymer (Sibarist)']
+                                              .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13, color: Colors.white)))).toList(),
+                                          onChanged: (val) { if (val != null) notifier.updateFilterType(val); },
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
                               ),
                               const SizedBox(height: 12),
+                              // TextField kontroluje się sam, nie wymaga nasłuchiwania w Consumer
                               TextField(
                                 controller: _drawdownController,
                                 keyboardType: TextInputType.datetime,

@@ -27,7 +27,7 @@ jobs:
 
       # Krok 4: Zbudowanie zoptymalizowanej wersji Web
       - name: Build Web
-        run: flutter build web --base-href "/coffee_flavour_circle/" --release
+        run: flutter build web --base-href "/coffee_flavour_circle/" --wasm
 
       # Krok 5: Automatyczne wysłanie folderu build/web na gałąź gh-pages
       - name: Deploy to GitHub Pages
