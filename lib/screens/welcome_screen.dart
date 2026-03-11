@@ -53,6 +53,21 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
             
             const SizedBox(height: 10),
             
+            // Nowa akcja: Biblioteczka
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text('COFFEE LIBRARY', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () => context.push('/library'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
             // 2. Akcja poboczna (Secondary)
             SizedBox(
               width: double.infinity,

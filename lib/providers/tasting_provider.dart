@@ -8,6 +8,8 @@ import 'dart:ui' as ui;
 import '../core/constants.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+// Wymagane dla logiki inwentaryzacji "w locie"
+import 'coffee_library_provider.dart';
 
 // ==========================================
 // 1. MODEL DANYCH (STAN)
@@ -27,6 +29,10 @@ class TastingState {
   final String recipe;
   final String filterType;
   final String drawdownTime;
+
+  // INŻYNIERIA BAZY: Powiązanie z biblioteczką kaw
+  final String libraryId;
+  final bool saveToLibrary;
 
   final String primaryFlavorMain;
   final String primaryFlavorSub;
@@ -64,6 +70,9 @@ class TastingState {
     this.recipe = '',
     this.filterType = '',
     this.drawdownTime = '',
+
+    this.libraryId = '',
+    this.saveToLibrary = false,
     
     this.primaryFlavorMain = '',
     this.primaryFlavorSub = '',
@@ -102,6 +111,9 @@ class TastingState {
     String? recipe,
     String? filterType,
     String? drawdownTime,
+
+    String? libraryId,
+    bool? saveToLibrary,
     
     String? primaryFlavorMain,
     String? primaryFlavorSub,
@@ -139,6 +151,9 @@ class TastingState {
       recipe: recipe ?? this.recipe,
       filterType: filterType ?? this.filterType,
       drawdownTime: drawdownTime ?? this.drawdownTime,
+
+      libraryId: libraryId ?? this.libraryId,
+      saveToLibrary: saveToLibrary ?? this.saveToLibrary,
       
       primaryFlavorMain: primaryFlavorMain ?? this.primaryFlavorMain,
       primaryFlavorSub: primaryFlavorSub ?? this.primaryFlavorSub,
@@ -175,6 +190,8 @@ class TastingState {
       'recipe': recipe,
       'filterType': filterType,
       'drawdownTime': drawdownTime,
+      'libraryId': libraryId,
+      'saveToLibrary': saveToLibrary,
       'primaryFlavorMain': primaryFlavorMain,
       'primaryFlavorSub': primaryFlavorSub,
       'primaryFlavorSpecific': primaryFlavorSpecific, 
@@ -215,6 +232,10 @@ class TastingNotifier extends Notifier<TastingState> {
   void updateRecipe(String value) => state = state.copyWith(recipe: value);
   void updateFilterType(String value) => state = state.copyWith(filterType: value);
   void updateDrawdownTime(String value) => state = state.copyWith(drawdownTime: value);
+
+  // Zmienne powiązane z zarządzaniem biblioteką kaw "w locie"
+  void updateLibraryId(String value) => state = state.copyWith(libraryId: value);
+  void toggleSaveToLibrary(bool value) => state = state.copyWith(saveToLibrary: value);
 
   void toggleDryNote(String note) {
     final currentNotes = List<String>.from(state.dryNotes);
@@ -307,7 +328,29 @@ class TastingNotifier extends Notifier<TastingState> {
       history = jsonDecode(historyJson);
     }
 
-    final sessionData = state.toMap();
+    // INŻYNIERIA BAZY: Automatyczna inwentaryzacja zużycia i paczek "w locie"
+    String activeLibraryId = state.libraryId;
+
+    if (state.saveToLibrary && state.coffeeName.isNotEmpty && state.beanDetails.isNotEmpty) {
+      // Tworzenie nowej paczki "w locie" z domyślną startową zawartością 250g
+      activeLibraryId = DateTime.now().millisecondsSinceEpoch.toString();
+      final newBean = CoffeeBean(
+        id: activeLibraryId,
+        roaster: state.coffeeName,
+        name: state.beanDetails,
+        initialWeight: 250.0, 
+        remainingWeight: 250.0 - state.dose, // Odejmowanie od razu obecnego parzenia
+        price: 0.0,
+        openDate: DateTime.now(),
+      );
+      await ref.read(coffeeLibraryProvider.notifier).addCoffee(newBean);
+    } else if (activeLibraryId.isNotEmpty) {
+      // Odejmowanie użytej kawy z istniejącej paczki
+      await ref.read(coffeeLibraryProvider.notifier).updateRemainingWeight(activeLibraryId, state.dose);
+    }
+
+    // Modyfikujemy stan o aktualne LibraryID przed zapisem na dysk
+    final sessionData = state.copyWith(libraryId: activeLibraryId).toMap();
     sessionData['timestamp'] = DateTime.now().toIso8601String();
     
     history.insert(0, sessionData);
@@ -316,11 +359,9 @@ class TastingNotifier extends Notifier<TastingState> {
     state = const TastingState();
   }
 
-  // INŻYNIERIA UX: Pozwala na usunięcie konkretnego zapisanego smaku (1, 2 lub 3)
-  // bez czyszczenia pozostałych.
+  // INŻYNIERIA UX: Pozwala na usunięcie konkretnego zapisanego smaku (1, 2 lub 3) bez resetowania całości
   void removeFlavor(int index) {
     if (index == 1) {
-      // Jeśli usuwamy pierwszy, przesuwamy pozostałe "do góry"
       state = state.copyWith(
         primaryFlavorMain: state.secondaryFlavorMain,
         primaryFlavorSub: state.secondaryFlavorSub,
@@ -333,7 +374,6 @@ class TastingNotifier extends Notifier<TastingState> {
         tertiaryFlavorSpecific: '',
       );
     } else if (index == 2) {
-      // Jeśli usuwamy drugi, przesuwamy trzeci na miejsce drugiego
       state = state.copyWith(
         secondaryFlavorMain: state.tertiaryFlavorMain,
         secondaryFlavorSub: state.tertiaryFlavorSub,
@@ -381,11 +421,13 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
       map['recipe'] ??= '';
       map['filterType'] ??= '';
       map['drawdownTime'] ??= '';
+      map['libraryId'] ??= '';
+      map['saveToLibrary'] ??= false;
       
       map['primaryFlavorSpecific'] ??= '';
       map['secondaryFlavorSpecific'] ??= '';
       
-      // Bezpieczna konwersja wartości
+      // Bezpieczna konwersja wartości dla starych sesji
       for (var key in ['sweetness', 'acidity', 'bitterness']) {
         if (map[key] != null) {
           double val = (map[key] as num).toDouble();
@@ -465,8 +507,7 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
       try {
         final ByteData data = await rootBundle.load(path);
         // INŻYNIERIA WYDAJNOŚCI: Usunięto targetWidth/Height!
-        // Obraz ładuje się w pełnej rozdzielczości, a skalowaniem zajmie się 
-        // silnik antyaliasingu bezpośrednio na Canvasie, zachowując "brzytwę".
+        // Obraz ładuje się w pełnej rozdzielczości, a skalowaniem zajmie się silnik antyaliasingu na Canvasie.
         final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
         final ui.FrameInfo fi = await codec.getNextFrame();
         cache[path] = fi.image;
@@ -478,6 +519,7 @@ final iconCacheProvider = FutureProvider<Map<String, ui.Image>>((ref) async {
   }
   return cache;
 });
+
 // ==========================================
 // 4. MODUŁ ZARZĄDZANIA KOPIAMI ZAPASOWYMI
 // ==========================================

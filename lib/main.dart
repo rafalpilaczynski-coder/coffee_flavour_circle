@@ -12,6 +12,7 @@ import 'screens/flavor_wheel_screen.dart';
 import 'screens/final_evaluation_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/personal_settings_screen.dart';
+import 'screens/coffee_library_screen.dart';
 
 void main() {
   runApp(
@@ -31,6 +32,7 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/evaluation', builder: (context, state) => const FinalEvaluationScreen()),
     GoRoute(path: '/history', builder: (context, state) => const HistoryScreen()),
     GoRoute(path: '/settings',builder: (context, state) => const PersonalSettingsScreen()),
+    GoRoute(path: '/library',builder: (context, state) => const CoffeeLibraryScreen()),
   ],
 );
 

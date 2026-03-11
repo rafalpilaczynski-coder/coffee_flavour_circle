@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/tasting_provider.dart';
 import '../providers/user_preferences_provider.dart';
+import '../providers/coffee_library_provider.dart'; // INŻYNIERIA BAZY: Dodany import
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
 
@@ -18,17 +19,14 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
   late TextEditingController _coffeeController;
   late TextEditingController _grinderSettingController;
   late TextEditingController _beanDetailsController;
-  late TextEditingController _drawdownController; 
 
   @override
   void initState() {
     super.initState();
-    // Inicjalizacja z jednorazowego odczytu (read) bez nasłuchiwania
     final initialState = ref.read(tastingProvider);
     _coffeeController = TextEditingController(text: initialState.coffeeName);
     _grinderSettingController = TextEditingController(text: initialState.grinderSetting);
     _beanDetailsController = TextEditingController(text: initialState.beanDetails);
-    _drawdownController = TextEditingController(text: initialState.drawdownTime);
   }
 
   @override
@@ -36,14 +34,13 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
     _coffeeController.dispose();
     _grinderSettingController.dispose();
     _beanDetailsController.dispose();
-    _drawdownController.dispose();
     super.dispose();
   }
 
   Widget _buildAutocompleteField({
     required String label,
     required Iterable<String> options, 
-    required String initialValue,
+    required TextEditingController externalController, // Używamy zewnętrznego kontrolera do synchronizacji z Dropdownem
     required Function(String) onSelected,
     required Function(String) onChanged,
   }) {
@@ -55,7 +52,17 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        if (controller.text.isEmpty && initialValue.isNotEmpty) controller.text = initialValue;
+        // Synchronizacja kontrolera Autocomplete z naszym nadrzędnym _coffeeController
+        if (controller.text != externalController.text && !focusNode.hasFocus) {
+          controller.text = externalController.text;
+        }
+        controller.addListener(() {
+          if (controller.text != externalController.text) {
+            externalController.text = controller.text;
+            onChanged(controller.text);
+          }
+        });
+
         return TextField(
           controller: controller,
           focusNode: focusNode,
@@ -64,7 +71,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           ),
-          onChanged: onChanged,
         );
       },
       optionsViewBuilder: (context, onSelected, options) {
@@ -99,15 +105,12 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // INŻYNIERIA WYDAJNOŚCI: Wyciągamy na poziom główny tylko statyczne zależności.
-    // Usunięto nasłuchiwanie całego tastingProvider.
     final notifier = ref.read(tastingProvider.notifier);
     final userPrefs = ref.watch(userPreferencesProvider);
     
     final asyncRoasteries = ref.watch(combinedRoasteriesProvider);
     final grindersAsync = ref.watch(grindersDatabaseProvider);
 
-    // .select() izoluje przebudowę - ten fragment uruchomi się ponownie tylko, jeśli zmienisz method lub grinderName
     final methodFromState = ref.watch(tastingProvider.select((s) => s.method));
     final grinderNameFromState = ref.watch(tastingProvider.select((s) => s.grinderName));
 
@@ -205,16 +208,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                           Row(
                             children: [
                               Expanded(
-                                child: _buildAutocompleteField(
-                                  label: 'Roaster (Palarnia)', 
-                                  options: roasteries, 
-                                  initialValue: ref.read(tastingProvider).coffeeName, // Odczyt statyczny
-                                  onSelected: (val) => notifier.updateCoffeeName(val),
-                                  onChanged: (val) => notifier.updateCoffeeName(val),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
                                 child: TextField(
                                   controller: _grinderSettingController,
                                   keyboardType: TextInputType.number,
@@ -226,7 +219,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                                     suffixIcon: activeMultiplier > 0 
                                       ? Consumer(
-                                          // Izolacja aktualizacji mikrometrów (tylko ten mały widget odbudowuje się przy pisaniu)
                                           builder: (context, ref, child) {
                                             final settingStr = ref.watch(tastingProvider.select((s) => s.grinderSetting));
                                             return Padding(
@@ -253,19 +245,172 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                   onChanged: (val) => notifier.updateGrinderSetting(val),
                                 ),
                               ),
+                              const SizedBox(width: 12),
+                              const Spacer(), // Wypełnienie miejsca, żeby slider klików był tej samej szerokości
                             ],
                           ),
+                          
+                          const SizedBox(height: 16),
+                          const Divider(color: Colors.white10, height: 1),
                           const SizedBox(height: 12),
-                          TextField(
-                            controller: _beanDetailsController,
-                            decoration: const InputDecoration(
-                              labelText: 'Bean & Origin (np. Ethiopia Yirgacheffe Washed)',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                            ),
-                            onChanged: (val) => notifier.updateBeanDetails(val),
+
+                          // ==========================================
+                          // INŻYNIERIA UI: SEKCJA WYBORU KAWY
+                          // ==========================================
+// ==========================================
+                          // INŻYNIERIA UI: SEKCJA WYBORU KAWY
+                          // ==========================================
+                          Consumer(
+                            builder: (context, ref, child) {
+                              final coffeesAsync = ref.watch(coffeeLibraryProvider);
+                              final tastingData = ref.watch(tastingProvider);
+                              final notifier = ref.read(tastingProvider.notifier);
+                              
+                              // Bezpieczne pobranie danych z pominięciem stanu "loading" po pierwszym załadowaniu
+                              final libraryCoffees = coffeesAsync.value ?? [];
+
+                              return Column(
+                                children: [
+                                  // 1. Wyszukiwarka z Biblioteczki (Autocomplete)
+                                  if (libraryCoffees.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 12.0),
+                                      child: Autocomplete<CoffeeBean>(
+                                        displayStringForOption: (CoffeeBean option) => '${option.roaster} - ${option.name}',
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
+                                          if (textEditingValue.text.isEmpty) {
+                                            return libraryCoffees; // Puste pole - zwraca wszystko, czeka na wpisywanie
+                                          }
+                                          return libraryCoffees.where((bean) {
+                                            final searchStr = '${bean.roaster} ${bean.name}'.toLowerCase();
+                                            return searchStr.contains(textEditingValue.text.toLowerCase());
+                                          });
+                                        },
+                                        onSelected: (CoffeeBean selection) {
+                                          notifier.updateLibraryId(selection.id);
+                                          notifier.updateCoffeeName(selection.roaster);
+                                          notifier.updateBeanDetails(selection.name);
+                                          notifier.toggleSaveToLibrary(false);
+                                          
+                                          // Ścisła synchronizacja kontrolerów tekstowych na ekranie
+                                          _coffeeController.text = selection.roaster;
+                                          _beanDetailsController.text = selection.name;
+                                        },
+                                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                          // Mechanizm czyszczący: usunięcie tekstu odcina powiązanie z paczką
+                                          controller.addListener(() {
+                                            if (controller.text.isEmpty && tastingData.libraryId.isNotEmpty) {
+                                              notifier.updateLibraryId('');
+                                            }
+                                          });
+                                          
+                                          return TextField(
+                                            controller: controller,
+                                            focusNode: focusNode,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Search Coffee Library',
+                                              hintText: 'Start typing roaster or bean name...',
+                                              prefixIcon: Icon(Icons.inventory_2_outlined, size: 18, color: Colors.amber),
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                            ),
+                                          );
+                                        },
+                                        optionsViewBuilder: (context, onSelected, options) {
+                                          return Align(
+                                            alignment: Alignment.topLeft,
+                                            child: Material(
+                                              elevation: 4,
+                                              borderRadius: BorderRadius.circular(8),
+                                              color: const Color(0xFF2C2520),
+                                              child: Container(
+                                                width: MediaQuery.of(context).size.width - 32, // Szerokość dopasowana do ekranu
+                                                constraints: const BoxConstraints(maxHeight: 250),
+                                                child: ListView.builder(
+                                                  padding: EdgeInsets.zero,
+                                                  shrinkWrap: true,
+                                                  itemCount: options.length,
+                                                  itemBuilder: (context, index) {
+                                                    final bean = options.elementAt(index);
+                                                    return ListTile(
+                                                      dense: true,
+                                                      leading: const Icon(Icons.coffee_outlined, color: Colors.amber, size: 20),
+                                                      title: Text('${bean.roaster} - ${bean.name}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                                      subtitle: Text('${bean.remainingWeight.toInt()}g left in bag', style: const TextStyle(color: Colors.amber, fontSize: 11)),
+                                                      onTap: () => onSelected(bean),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+
+                                  // 2. Klasyczne pola palarni i nazwy
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildAutocompleteField(
+                                          label: 'Roaster (Palarnia)', 
+                                          options: roasteries, 
+                                          externalController: _coffeeController,
+                                          onSelected: (val) {
+                                            notifier.updateCoffeeName(val);
+                                            if (tastingData.libraryId.isNotEmpty) notifier.updateLibraryId('');
+                                          },
+                                          onChanged: (val) {
+                                            notifier.updateCoffeeName(val);
+                                            if (tastingData.libraryId.isNotEmpty) notifier.updateLibraryId('');
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _beanDetailsController,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Bean & Origin',
+                                            isDense: true,
+                                            contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                          ),
+                                          onChanged: (val) {
+                                            notifier.updateBeanDetails(val);
+                                            if (tastingData.libraryId.isNotEmpty) notifier.updateLibraryId('');
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  // 3. Dynamiczny checkbox do zapisywania nowej paczki
+                                  if (tastingData.libraryId.isEmpty && tastingData.coffeeName.isNotEmpty && tastingData.beanDetails.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            height: 24, width: 24,
+                                            child: Checkbox(
+                                              value: tastingData.saveToLibrary,
+                                              activeColor: Colors.amber,
+                                              checkColor: Colors.black,
+                                              onChanged: (val) {
+                                                if (val != null) notifier.toggleSaveToLibrary(val);
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Expanded(child: Text('Save as new bag to Coffee Library (250g)', style: TextStyle(fontSize: 11, color: Colors.amber, fontStyle: FontStyle.italic))),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              );
+                            }
                           ),
-                        ],
+                          ],
                       ),
                     ),
                   ),
@@ -345,8 +490,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                   Card(
                     margin: const EdgeInsets.only(top: 12.0, bottom: 12.0),
                     child: ExpansionTile(
-                      shape: const Border(), // USUWA BIAŁE LINIE PO ROZWINIĘCIU
-                      collapsedShape: const Border(), // ZABEZPIECZA STAN ZWINIĘTY
+                      shape: const Border(), 
+                      collapsedShape: const Border(), 
                       collapsedIconColor: Colors.amber,
                       iconColor: Colors.amber,
                       title: const Row(
@@ -361,7 +506,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
                             children: [
-                              // Dropdowny izolowane w Consumerze
                               Consumer(
                                 builder: (context, ref, child) {
                                   final recipe = ref.watch(tastingProvider.select((s) => s.recipe));
