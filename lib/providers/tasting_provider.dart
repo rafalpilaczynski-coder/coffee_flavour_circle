@@ -198,6 +198,9 @@ class TastingState {
       'secondaryFlavorMain': secondaryFlavorMain,
       'secondaryFlavorSub': secondaryFlavorSub,
       'secondaryFlavorSpecific': secondaryFlavorSpecific, 
+      'tertiaryFlavorMain': tertiaryFlavorMain,
+      'tertiaryFlavorSub': tertiaryFlavorSub,
+      'tertiaryFlavorSpecific': tertiaryFlavorSpecific,
       'sweetness': sweetness,
       'acidity': acidity,
       'bitterness': bitterness,
@@ -426,6 +429,10 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
       
       map['primaryFlavorSpecific'] ??= '';
       map['secondaryFlavorSpecific'] ??= '';
+      // NOWE ZABEZPIECZENIE: Dla kompatybilności wstecznej
+      map['tertiaryFlavorMain'] ??= '';
+      map['tertiaryFlavorSub'] ??= '';
+      map['tertiaryFlavorSpecific'] ??= '';
       
       // Bezpieczna konwersja wartości dla starych sesji
       for (var key in ['sweetness', 'acidity', 'bitterness']) {

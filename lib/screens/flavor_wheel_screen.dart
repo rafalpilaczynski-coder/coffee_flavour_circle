@@ -58,7 +58,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
     });
   }
 
-  void _handleSegmentTap(String categoryName, int index) {
+ void _handleSegmentTap(String categoryName, int index) {
     final notifier = ref.read(tastingProvider.notifier);
     
     if (categoryName.startsWith('Overall\n')) {
@@ -134,13 +134,14 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
         case WheelPhase.tertiarySub:
           if (categoryName.isEmpty || categoryName.startsWith('Overall')) {
              notifier.setTertiaryFlavor(_tempMainSelection!, '', '');
-             _syncPhaseWithProvider();
+             _syncPhaseWithProvider(); // BŁĄD BYŁ TU: Przejdzie do 'completed' w _syncPhaseWithProvider
           } else {
              final subMap = flavorTree[_tempMainSelection!]!['sub'] as Map<String, List<String>>;
              final specificList = subMap[categoryName] ?? [];
              if (specificList.isEmpty) {
+                // BŁĄD BYŁ TU: Zapisanie smaku bez "specific" i wymuszenie synca
                 notifier.setTertiaryFlavor(_tempMainSelection!, categoryName, '');
-                _syncPhaseWithProvider();
+                _syncPhaseWithProvider(); 
              } else {
                 _tempSubSelection = categoryName;
                 _tempSubIndex = index;
@@ -149,6 +150,7 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
           }
           break;
         case WheelPhase.tertiaryTertiary:
+          // BŁĄD BYŁ TU: Trzeba było podać _tempSubSelection, a nie pusty string.
           notifier.setTertiaryFlavor(_tempMainSelection!, _tempSubSelection!, categoryName);
           _syncPhaseWithProvider();
           break;
@@ -158,7 +160,6 @@ class _FlavorWheelScreenState extends ConsumerState<FlavorWheelScreen> {
       }
     });
   }
-
   void _resetTemps() {
     _tempMainSelection = null;
     _tempMainIndex = null;

@@ -6,6 +6,7 @@ import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
 import '../core/brewing_logic.dart';
+import 'package:flutter/services.dart';
 
 class FinalEvaluationScreen extends ConsumerStatefulWidget {
   const FinalEvaluationScreen({super.key});
@@ -157,7 +158,8 @@ class _FinalEvaluationScreenState extends ConsumerState<FinalEvaluationScreen> {
 
             TextField(
               controller: _drawdownController,
-              keyboardType: TextInputType.datetime,
+              keyboardType: TextInputType.number,
+              inputFormatters: [TimeTextInputFormatter()], // Dodanie formatowania czasu
               onChanged: (val) => notifier.updateDrawdownTime(val),
               decoration: InputDecoration(
                 labelText: 'Total Drawdown Time (Czas całkowity)',
@@ -376,6 +378,25 @@ class RelativeTasteSlider extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+class TimeTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    // Usuwa wszystko co nie jest cyfrą
+    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.length > 4) return oldValue; // Max 4 cyfry (MMSS)
+    
+    String newString = '';
+    for (int i = 0; i < text.length; i++) {
+      if (i == 2) newString += ':'; // Automatyczne wstawianie dwukropka
+      newString += text[i];
+    }
+    
+    return TextEditingValue(
+      text: newString,
+      selection: TextSelection.collapsed(offset: newString.length),
     );
   }
 }

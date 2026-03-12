@@ -207,6 +207,8 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
+                              const Spacer(), // Puste miejsce zostaje pod metodą parzenia
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: TextField(
                                   controller: _grinderSettingController,
@@ -591,7 +593,7 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
 
-  @override
+@override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: _formatValue(widget.value));
@@ -599,11 +601,18 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
     
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
-        _controller.text = _formatValue(widget.value);
+        // INŻYNIERIA UX: Zamiast od razu resetować tekst, próbujemy go sparsować i zapisać.
+        // Jeśli wartość jest poprawna, aktualizujemy stan nadrzędny (Provider).
+        final parsed = double.tryParse(_controller.text.replaceAll(',', '.'));
+        if (parsed != null && parsed >= widget.min && parsed <= widget.max) {
+          widget.onChanged(parsed);
+        } else {
+          // Resetujemy tylko, jeśli ktoś wpisał bzdury (np. litery)
+          _controller.text = _formatValue(widget.value);
+        }
       }
     });
   }
-
   @override
   void didUpdateWidget(covariant SliderWithTextInput oldWidget) {
     super.didUpdateWidget(oldWidget);

@@ -1,7 +1,7 @@
 // lib/screens/history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart'; // Dodaj intl do pubspec.yaml dla formatowania dat
+import 'package:intl/intl.dart'; 
 import '../providers/tasting_provider.dart';
 import '../core/constants.dart';
 import '../shared/taste_radar_chart.dart';
@@ -288,18 +288,31 @@ class HistoryItemCard extends ConsumerWidget {
                   ],
 
                   _buildSectionHeader('FLAVOR PROFILE'),
-                  _buildFlavorRow(
-                    session['primaryFlavorMain'], 
-                    session['primaryFlavorSub'], 
-                    session['primaryFlavorSpecific'], 
-                    isPrimary: true
-                  ),
-                  const SizedBox(height: 8),
-                  _buildFlavorRow(
-                    session['secondaryFlavorMain'], 
-                    session['secondaryFlavorSub'],
-                    session['secondaryFlavorSpecific'] 
-                  ),
+                  if (session['primaryFlavorMain']?.toString().isNotEmpty == true) ...[
+                    _buildFlavorRow(
+                      session['primaryFlavorMain'], 
+                      session['primaryFlavorSub'], 
+                      session['primaryFlavorSpecific'], 
+                      isPrimary: true
+                    ),
+                  ],
+                  if (session['secondaryFlavorMain']?.toString().isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    _buildFlavorRow(
+                      session['secondaryFlavorMain'], 
+                      session['secondaryFlavorSub'],
+                      session['secondaryFlavorSpecific'] 
+                    ),
+                  ],
+                  // DODANO WSPARCIE DLA TRZECIEGO SMAKU
+                  if (session['tertiaryFlavorMain']?.toString().isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    _buildFlavorRow(
+                      session['tertiaryFlavorMain'], 
+                      session['tertiaryFlavorSub'],
+                      session['tertiaryFlavorSpecific'] 
+                    ),
+                  ],
                   
                   const SizedBox(height: 24),
                   
@@ -417,7 +430,6 @@ class HistoryItemCard extends ConsumerWidget {
     );
   }
 
-  // INŻYNIERIA UX: Krok B - Nowa metoda renderowania ocen (zależna od skali kolorów)
   Widget _buildRatingBadge(double enjoyment) {
     Color badgeColor;
     if (enjoyment >= 8.0) {
