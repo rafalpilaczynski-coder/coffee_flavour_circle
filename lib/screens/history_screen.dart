@@ -7,6 +7,7 @@ import '../core/constants.dart';
 import '../shared/taste_radar_chart.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -20,6 +21,11 @@ class HistoryScreen extends ConsumerWidget {
         title: const Text('Brewing History'), 
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined, color: Colors.amber),
+            tooltip: 'Statistics & Correlations',
+            onPressed: () => context.push('/statistics'),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings),
             onSelected: (value) async {

@@ -13,6 +13,7 @@ import 'screens/final_evaluation_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/personal_settings_screen.dart';
 import 'screens/coffee_library_screen.dart';
+import 'screens/statistics_screen.dart';
 
 void main() {
   runApp(
@@ -33,6 +34,7 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/history', builder: (context, state) => const HistoryScreen()),
     GoRoute(path: '/settings',builder: (context, state) => const PersonalSettingsScreen()),
     GoRoute(path: '/library',builder: (context, state) => const CoffeeLibraryScreen()),
+    GoRoute(path: '/statistics',builder: (context, state) => const StatisticsScreen()),
   ],
 );
 
