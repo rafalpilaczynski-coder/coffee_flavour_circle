@@ -322,7 +322,8 @@ class TastingNotifier extends Notifier<TastingState> {
     state = state.copyWith(defects: currentDefects);
   }
 
-  Future<void> saveSession() async {
+Future<void> saveSession() async {
+
     final prefs = await SharedPreferences.getInstance();
     final historyJson = prefs.getString('tasting_history');
     
@@ -331,37 +332,44 @@ class TastingNotifier extends Notifier<TastingState> {
       history = jsonDecode(historyJson);
     }
 
-    // INŻYNIERIA BAZY: Automatyczna inwentaryzacja zużycia i paczek "w locie"
     String activeLibraryId = state.libraryId;
+    double calculatedCost = 0.0; // INŻYNIERIA EKONOMICZNA
 
     if (state.saveToLibrary && state.coffeeName.isNotEmpty && state.beanDetails.isNotEmpty) {
-      // Tworzenie nowej paczki "w locie" z domyślną startową zawartością 250g
       activeLibraryId = DateTime.now().millisecondsSinceEpoch.toString();
       final newBean = CoffeeBean(
         id: activeLibraryId,
         roaster: state.coffeeName,
         name: state.beanDetails,
         initialWeight: 250.0, 
-        remainingWeight: 250.0 - state.dose, // Odejmowanie od razu obecnego parzenia
+        remainingWeight: 250.0 - state.dose,
         price: 0.0,
         openDate: DateTime.now(),
       );
       await ref.read(coffeeLibraryProvider.notifier).addCoffee(newBean);
     } else if (activeLibraryId.isNotEmpty) {
-      // Odejmowanie użytej kawy z istniejącej paczki
       await ref.read(coffeeLibraryProvider.notifier).updateRemainingWeight(activeLibraryId, state.dose);
+      
+      // Obliczanie kosztu filiżanki na podstawie aktualnej ceny paczki
+      final libraryAsync = ref.read(coffeeLibraryProvider);
+      final library = libraryAsync.value ?? [];
+      try {
+        final bean = library.firstWhere((b) => b.id == activeLibraryId);
+        if (bean.price > 0 && bean.initialWeight > 0) {
+          calculatedCost = (bean.price / bean.initialWeight) * state.dose;
+        }
+      } catch (_) {}
     }
 
-    // Modyfikujemy stan o aktualne LibraryID przed zapisem na dysk
     final sessionData = state.copyWith(libraryId: activeLibraryId).toMap();
     sessionData['timestamp'] = DateTime.now().toIso8601String();
+    sessionData['brewCost'] = calculatedCost; // Zapisujemy koszt do historii
     
     history.insert(0, sessionData);
     
     await prefs.setString('tasting_history', jsonEncode(history));
     state = const TastingState();
   }
-
   // INŻYNIERIA UX: Pozwala na usunięcie konkretnego zapisanego smaku (1, 2 lub 3) bez resetowania całości
   void removeFlavor(int index) {
     if (index == 1) {
@@ -433,6 +441,8 @@ final historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
       map['tertiaryFlavorMain'] ??= '';
       map['tertiaryFlavorSub'] ??= '';
       map['tertiaryFlavorSpecific'] ??= '';
+
+      map['brewCost'] ??= 0.0; // <--- DODAJ TĘ LINIĘ
       
       // Bezpieczna konwersja wartości dla starych sesji
       for (var key in ['sweetness', 'acidity', 'bitterness']) {

@@ -123,6 +123,7 @@ class HistoryItemCard extends ConsumerWidget {
     final String recipe = session['recipe'] ?? '';
     final String filterType = session['filterType'] ?? '';
     final String drawdownTime = session['drawdownTime'] ?? '';
+    final double brewCost = (session['brewCost'] as num?)?.toDouble() ?? 0.0; // <--- DODANA ZMIENNA
 
     // INŻYNIERIA UX: Krok A - Zawinięcie karty w Dismissible
     return Dismissible(
@@ -194,7 +195,7 @@ class HistoryItemCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                 ],
                 Text(
-                  DateFormat('yyyy-MM-dd | HH:mm').format(date),
+                  '${DateFormat('yyyy-MM-dd | HH:mm').format(date)}${brewCost > 0 ? '  •  ${brewCost.toStringAsFixed(2)} PLN' : ''}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -214,6 +215,8 @@ class HistoryItemCard extends ConsumerWidget {
                       _buildMiniInfo(Icons.water_drop, '${session['waterVolume']}ml'),
                       _buildMiniInfo(Icons.scale, '${session['dose']}g'),
                       _buildMiniInfo(Icons.thermostat, '${session['temperature']}°C'),
+                      if (brewCost > 0)
+                        _buildMiniInfo(Icons.payments_outlined, '${brewCost.toStringAsFixed(2)} PLN'), // <--- DODANA IKONA
                     ],
                   ),
                   const SizedBox(height: 16),

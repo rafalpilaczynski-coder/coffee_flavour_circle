@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/tasting_provider.dart';
 import '../providers/user_preferences_provider.dart';
-import '../providers/coffee_library_provider.dart'; // INŻYNIERIA BAZY: Dodany import
+import '../providers/coffee_library_provider.dart';
 import '../core/constants.dart';
 import '../shared/primary_button.dart';
 
@@ -40,7 +40,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
   Widget _buildAutocompleteField({
     required String label,
     required Iterable<String> options, 
-    required TextEditingController externalController, // Używamy zewnętrznego kontrolera do synchronizacji z Dropdownem
+    required TextEditingController externalController, 
     required Function(String) onSelected,
     required Function(String) onChanged,
   }) {
@@ -52,7 +52,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        // Synchronizacja kontrolera Autocomplete z naszym nadrzędnym _coffeeController
         if (controller.text != externalController.text && !focusNode.hasFocus) {
           controller.text = externalController.text;
         }
@@ -81,8 +80,9 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
             elevation: 4,
             borderRadius: BorderRadius.circular(8),
             color: appSurface,
-            child: SizedBox(
+            child: Container(
               width: MediaQuery.of(context).size.width / 2 - 24,
+              constraints: const BoxConstraints(maxHeight: 250),
               child: ListView.builder(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
@@ -176,8 +176,13 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                       padding: const EdgeInsets.all(12.0),
                       child: Column(
                         children: [
+                          // ==========================================
+                          // METODA PARZENIA I USTAWIENIA MŁYNKA
+                          // ==========================================
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // LEWA KOLUMNA: Metoda Parzenia
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   initialValue: selectedMethod,
@@ -189,66 +194,64 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
+                              
+                              // PRAWA KOLUMNA: Młynek i jego nastawa
                               Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: selectedGrinder.isEmpty ? null : selectedGrinder,
-                                  dropdownColor: const Color(0xFF1E1A18),
-                                  iconSize: 28,
-                                  decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
-                                  items: activeGrinders.map((g) => DropdownMenuItem(
-                                    value: g, 
-                                    child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white))
-                                  )).toList(),
-                                  onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              const Spacer(), // Puste miejsce zostaje pod metodą parzenia
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  controller: _grinderSettingController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'Clicks/Setting',
-                                    hintText: hintText,
-                                    hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                                    suffixIcon: activeMultiplier > 0 
-                                      ? Consumer(
-                                          builder: (context, ref, child) {
-                                            final settingStr = ref.watch(tastingProvider.select((s) => s.grinderSetting));
-                                            return Padding(
-                                              padding: const EdgeInsets.only(right: 8.0),
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                crossAxisAlignment: CrossAxisAlignment.end,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    settingStr.isNotEmpty && int.tryParse(settingStr) != null
-                                                        ? '${(int.parse(settingStr) * activeMultiplier).toInt()} µm'
-                                                        : '0 µm',
-                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      initialValue: selectedGrinder.isEmpty ? null : selectedGrinder,
+                                      dropdownColor: const Color(0xFF1E1A18),
+                                      iconSize: 28,
+                                      decoration: const InputDecoration(labelText: 'Grinder', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12)),
+                                      items: activeGrinders.map((g) => DropdownMenuItem(
+                                        value: g, 
+                                        child: Text(g.isEmpty ? 'None' : g, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white))
+                                      )).toList(),
+                                      onChanged: (val) { if (val != null) notifier.updateGrinderName(val); },
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _grinderSettingController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        labelText: 'Setting',
+                                        hintText: hintText,
+                                        hintStyle: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic, fontSize: 11),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                        suffixIconConstraints: const BoxConstraints(maxWidth: 60), 
+                                        suffixIcon: activeMultiplier > 0 
+                                          ? Consumer(
+                                              builder: (context, ref, child) {
+                                                final settingStr = ref.watch(tastingProvider.select((s) => s.grinderSetting));
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(right: 8.0),
+                                                  child: Column(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        settingStr.isNotEmpty && int.tryParse(settingStr) != null
+                                                            ? '${(int.parse(settingStr) * activeMultiplier).toInt()} µm'
+                                                            : '0 µm',
+                                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                                      ),
+                                                      const Text('Gap', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                                                    ],
                                                   ),
-                                                  const Text('Gap', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                                                ],
-                                              ),
-                                            );
-                                          }
-                                        )
-                                      : null,
-                                  ),
-                                  onChanged: (val) => notifier.updateGrinderSetting(val),
+                                                );
+                                              }
+                                            )
+                                          : null,
+                                      ),
+                                      onChanged: (val) => notifier.updateGrinderSetting(val),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              const Spacer(), // Wypełnienie miejsca, żeby slider klików był tej samej szerokości
                             ],
                           ),
                           
@@ -259,16 +262,12 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                           // ==========================================
                           // INŻYNIERIA UI: SEKCJA WYBORU KAWY
                           // ==========================================
-// ==========================================
-                          // INŻYNIERIA UI: SEKCJA WYBORU KAWY
-                          // ==========================================
                           Consumer(
                             builder: (context, ref, child) {
                               final coffeesAsync = ref.watch(coffeeLibraryProvider);
                               final tastingData = ref.watch(tastingProvider);
                               final notifier = ref.read(tastingProvider.notifier);
                               
-                              // Bezpieczne pobranie danych z pominięciem stanu "loading" po pierwszym załadowaniu
                               final libraryCoffees = coffeesAsync.value ?? [];
 
                               return Column(
@@ -281,7 +280,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                         displayStringForOption: (CoffeeBean option) => '${option.roaster} - ${option.name}',
                                         optionsBuilder: (TextEditingValue textEditingValue) {
                                           if (textEditingValue.text.isEmpty) {
-                                            return libraryCoffees; // Puste pole - zwraca wszystko, czeka na wpisywanie
+                                            return libraryCoffees;
                                           }
                                           return libraryCoffees.where((bean) {
                                             final searchStr = '${bean.roaster} ${bean.name}'.toLowerCase();
@@ -294,12 +293,10 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                           notifier.updateBeanDetails(selection.name);
                                           notifier.toggleSaveToLibrary(false);
                                           
-                                          // Ścisła synchronizacja kontrolerów tekstowych na ekranie
                                           _coffeeController.text = selection.roaster;
                                           _beanDetailsController.text = selection.name;
                                         },
                                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                          // Mechanizm czyszczący: usunięcie tekstu odcina powiązanie z paczką
                                           controller.addListener(() {
                                             if (controller.text.isEmpty && tastingData.libraryId.isNotEmpty) {
                                               notifier.updateLibraryId('');
@@ -326,7 +323,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                               borderRadius: BorderRadius.circular(8),
                                               color: const Color(0xFF2C2520),
                                               child: Container(
-                                                width: MediaQuery.of(context).size.width - 32, // Szerokość dopasowana do ekranu
+                                                width: MediaQuery.of(context).size.width - 32,
                                                 constraints: const BoxConstraints(maxHeight: 250),
                                                 child: ListView.builder(
                                                   padding: EdgeInsets.zero,
@@ -412,14 +409,14 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                               );
                             }
                           ),
-                          ],
+                        ],
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 12),
 
-                  // ==========================================
+// ==========================================
                   // ZAMKNIĘTY BĄBEL DLA SUWAKÓW
                   // ==========================================
                   Consumer(
@@ -429,6 +426,25 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                       final temperature = ref.watch(tastingProvider.select((s) => s.temperature));
                       final ratio = dose > 0 ? (water / dose) : 0.0;
                       final isOutlier = dose > 0 && water > 0 && (ratio < 12.0 || ratio > 20.0);
+
+                      // INŻYNIERIA EKONOMICZNA: Obliczanie kosztu na żywo względem suwaka
+                      final libraryId = ref.watch(tastingProvider.select((s) => s.libraryId));
+                      final coffeesAsync = ref.watch(coffeeLibraryProvider);
+                      double currentCost = 0.0;
+
+                      if (libraryId.isNotEmpty && coffeesAsync.value != null) {
+                        try {
+                          final bean = coffeesAsync.value!.firstWhere((b) => b.id == libraryId);
+                          if (bean.price > 0 && bean.initialWeight > 0) {
+                            currentCost = (bean.price / bean.initialWeight) * dose;
+                          }
+                        } catch (_) {}
+                      }
+
+                      // Dynamiczna etykieta: pokazuje cenę tylko, jeśli kawa ma ustaloną cenę w bazie
+                      final doseLabel = currentCost > 0 
+                          ? 'Dose (~${currentCost.toStringAsFixed(2)} PLN)' 
+                          : 'Dose';
 
                       return Column(
                         children: [
@@ -448,7 +464,7 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                                     onChanged: (val) => notifier.updateWaterVolume(val),
                                   ),
                                   SliderWithTextInput(
-                                    label: 'Dose', value: dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
+                                    label: doseLabel, value: dose, min: 5, max: 50, divisions: 450, suffix: 'g', color: Colors.green,
                                     onChanged: (val) => notifier.updateDose(val),
                                   ),
                                   Text(
@@ -485,7 +501,6 @@ class _BrewParametersScreenState extends ConsumerState<BrewParametersScreen> {
                       );
                     }
                   ),
-
                   // ==========================================
                   // ZAAWANSOWANE OPCJE PARZENIA
                   // ==========================================
@@ -593,7 +608,7 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
 
-@override
+  @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: _formatValue(widget.value));
@@ -601,18 +616,16 @@ class _SliderWithTextInputState extends State<SliderWithTextInput> {
     
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
-        // INŻYNIERIA UX: Zamiast od razu resetować tekst, próbujemy go sparsować i zapisać.
-        // Jeśli wartość jest poprawna, aktualizujemy stan nadrzędny (Provider).
         final parsed = double.tryParse(_controller.text.replaceAll(',', '.'));
         if (parsed != null && parsed >= widget.min && parsed <= widget.max) {
           widget.onChanged(parsed);
         } else {
-          // Resetujemy tylko, jeśli ktoś wpisał bzdury (np. litery)
           _controller.text = _formatValue(widget.value);
         }
       }
     });
   }
+
   @override
   void didUpdateWidget(covariant SliderWithTextInput oldWidget) {
     super.didUpdateWidget(oldWidget);

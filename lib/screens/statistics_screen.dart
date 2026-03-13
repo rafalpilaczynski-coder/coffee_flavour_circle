@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../providers/tasting_provider.dart';
 
 class StatisticsScreen extends StatelessWidget {
@@ -9,9 +10,8 @@ class StatisticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // INŻYNIERIA UX: Rozdzielenie analiz na zakładki
     return DefaultTabController(
-      length: 2,
+      length: 3, // Zmiana na 3 zakładki
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Brew Analytics', style: TextStyle(fontSize: 18)),
@@ -20,17 +20,21 @@ class StatisticsScreen extends StatelessWidget {
             indicatorColor: Colors.amber,
             labelColor: Colors.amber,
             unselectedLabelColor: Colors.grey,
+            isScrollable: true,
+            tabAlignment: TabAlignment.center,
             tabs: [
               Tab(icon: Icon(Icons.bar_chart), text: 'By Method'),
               Tab(icon: Icon(Icons.scatter_plot), text: 'Brew Ratio'),
+              Tab(icon: Icon(Icons.account_balance_wallet), text: 'Economics'),
             ],
           ),
         ),
         body: const TabBarView(
           physics: BouncingScrollPhysics(),
           children: [
-            _BrewMethodTab(), // Zakładka 1: Wykres słupkowy
-            _BrewRatioTab(),  // Zakładka 2: Wykres rozrzutu
+            _BrewMethodTab(), 
+            _BrewRatioTab(), 
+            _EconomicsTab(), // NOWA ZAKŁADKA
           ],
         ),
       ),
@@ -231,7 +235,7 @@ class _BrewMethodTabState extends ConsumerState<_BrewMethodTab> {
                     ),
                     barGroups: barGroups,
                   ),
-                  duration: const Duration(milliseconds: 600), // Zaktualizowana właściwość
+                  duration: const Duration(milliseconds: 600), 
                   curve: Curves.easeOutQuart,
                 ),
               ),
@@ -415,7 +419,229 @@ class _BrewRatioTabState extends ConsumerState<_BrewRatioTab> {
                       ),
                     ),
                   ),
-                  duration: const Duration(milliseconds: 600), // Zaktualizowana właściwość
+                  duration: const Duration(milliseconds: 600), 
+                  curve: Curves.easeOutQuart,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============================================================================
+// ZAKŁADKA 3: INŻYNIERIA KOSZTÓW (Ekonomia Parzenia)
+// ============================================================================
+class _EconomicsTab extends ConsumerWidget {
+  const _EconomicsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(historyProvider);
+
+    return historyAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
+      data: (sessions) {
+        // Filtrujemy tylko te parzenia, które posiadają zdefiniowany koszt > 0
+        final costSessions = sessions.where((s) => ((s['brewCost'] as num?)?.toDouble() ?? 0.0) > 0).toList();
+
+        if (costSessions.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text(
+                'No financial data yet.\n\nMake sure to add prices to your Coffee Bags in the Library. Future brews will automatically calculate the price per cup.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, height: 1.5),
+              ),
+            ),
+          );
+        }
+
+        double totalSpent = 0.0;
+        Map<String, double> monthlySpent = {};
+
+        for (var s in costSessions) {
+          final cost = (s['brewCost'] as num).toDouble();
+          totalSpent += cost;
+
+          final dateStr = s['timestamp'] as String?;
+          if (dateStr != null) {
+            final date = DateTime.tryParse(dateStr);
+            if (date != null) {
+              final monthKey = DateFormat('MMM yyyy').format(date); // np. Mar 2026
+              monthlySpent[monthKey] = (monthlySpent[monthKey] ?? 0.0) + cost;
+            }
+          }
+        }
+
+        final avgCost = totalSpent / costSessions.length;
+
+        // Sortowanie kluczy chronologicznie
+        final sortedKeys = monthlySpent.keys.toList()..sort((a, b) {
+          final dA = DateFormat('MMM yyyy').parse(a);
+          final dB = DateFormat('MMM yyyy').parse(b);
+          return dA.compareTo(dB);
+        });
+
+        // Dane do wykresu słupkowego
+        List<BarChartGroupData> barGroups = [];
+        double maxSpent = 0.0;
+        for (int i = 0; i < sortedKeys.length; i++) {
+          final spent = monthlySpent[sortedKeys[i]]!;
+          if (spent > maxSpent) maxSpent = spent;
+          
+          barGroups.add(
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: spent,
+                  color: Colors.greenAccent.shade400,
+                  width: 32,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                  backDrawRodData: BackgroundBarChartRodData(
+                    show: true,
+                    toY: maxSpent * 1.2, // Tło trochę powyżej maksymalnego słupka
+                    color: Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // GŁÓWNA KARTA PODSUMOWUJĄCA
+              Card(
+                color: const Color(0xFF1E1A18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.white10),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.account_balance_wallet, color: Colors.greenAccent, size: 32),
+                      const SizedBox(height: 12),
+                      const Text('Total Value Consumed', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${totalSpent.toStringAsFixed(2)} PLN',
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Divider(color: Colors.white10, height: 1),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Column(
+                            children: [
+                              const Text('Avg Cost / Cup', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              const SizedBox(height: 4),
+                              Text('${avgCost.toStringAsFixed(2)} PLN', style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          Container(width: 1, height: 30, color: Colors.white10),
+                          Column(
+                            children: [
+                              const Text('Tracked Brews', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              const SizedBox(height: 4),
+                              Text('${costSessions.length}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 32),
+              const Text('Monthly Spending Breakdown', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.amber)),
+              const SizedBox(height: 32),
+              
+              // WYKRES MIESIĘCZNY
+              Expanded(
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: maxSpent * 1.2, // Lekki margines na górze
+                    minY: 0.0,
+                    barTouchData: BarTouchData(
+                      enabled: true,
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (group) => const Color(0xFF1E1A18),
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          final month = sortedKeys[group.x.toInt()];
+                          return BarTooltipItem(
+                            '$month\n',
+                            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            children: [
+                              TextSpan(text: '${rod.toY.toStringAsFixed(2)} PLN', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 14, fontWeight: FontWeight.bold)),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 40,
+                          getTitlesWidget: (value, meta) {
+                            if (value == 0 || value > maxSpent) return const SizedBox.shrink();
+                            return Text('${value.toInt()}', style: const TextStyle(color: Colors.white70, fontSize: 11));
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 36,
+                          getTitlesWidget: (value, meta) {
+                            final index = value.toInt();
+                            if (index >= 0 && index < sortedKeys.length) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(sortedKeys[index], style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      ),
+                    ),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: const Border(
+                        bottom: BorderSide(color: Colors.white24, width: 2),
+                        left: BorderSide(color: Colors.white24, width: 2),
+                        top: BorderSide.none,
+                        right: BorderSide.none,
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1, dashArray: [5, 5]),
+                    ),
+                    barGroups: barGroups,
+                  ),
+                  duration: const Duration(milliseconds: 600), 
                   curve: Curves.easeOutQuart,
                 ),
               ),
