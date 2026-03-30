@@ -1,6 +1,8 @@
+// lib/providers/user_preferences_provider.dart
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/constants.dart'; // INŻYNIERIA BAZY: Wymagany import stałych
 
 class UserPreferencesState {
   final List<String> activeMethods;
@@ -8,7 +10,7 @@ class UserPreferencesState {
   final Map<String, String> lastGrinderSettings;
 
   const UserPreferencesState({
-    this.activeMethods = const ['V60'],
+    this.activeMethods = const [], // Domyślnie puste, ładujemy dynamicznie z constants
     this.grinders = const ['', '', ''],
     this.lastGrinderSettings = const {},
   });
@@ -30,6 +32,7 @@ class UserPreferencesNotifier extends Notifier<UserPreferencesState> {
   static const _methodsKey = 'user_active_methods';
   static const _grindersKey = 'user_grinders';
   static const _lastSettingsKey = 'user_last_grinder_settings';
+  static const _knownMethodsKey = 'user_known_methods'; // NOWY KLUCZ: Śledzenie wersji bazy
 
   @override
   UserPreferencesState build() {
@@ -39,10 +42,27 @@ class UserPreferencesNotifier extends Notifier<UserPreferencesState> {
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    final methods = prefs.getStringList(_methodsKey) ?? ['V60', 'AeroPress', 'Espresso'];
+
+    // 1. Odczyt zapisanych metod aktywowania. Fallback korzysta z constants.dart
+    List<String> activeMethods = prefs.getStringList(_methodsKey) ?? List.from(brewMethods);
     
+    // 2. INŻYNIERIA MIGRACJI: Porównanie bazy
+    // Pobieramy listę metod, które aplikacja już "widziała" w przeszłości
+    final knownMethods = prefs.getStringList(_knownMethodsKey) ?? List.from(brewMethods);
+    
+    // Filtrujemy nowości (np. dodane "V30" w nowej wersji kodu)
+    final newMethodsFromUpdate = brewMethods.where((m) => !knownMethods.contains(m)).toList();
+    
+    if (newMethodsFromUpdate.isNotEmpty) {
+      // Automatycznie włączamy nowe metody dla użytkownika
+      activeMethods.addAll(newMethodsFromUpdate);
+      
+      // Aktualizujemy pamięć podręczną, aby nie powtarzać tego przy kolejnym uruchomieniu
+      await prefs.setStringList(_knownMethodsKey, brewMethods);
+      await prefs.setStringList(_methodsKey, activeMethods);
+    }
+
     final grinders = prefs.getStringList(_grindersKey) ?? ['', '', ''];
-    // Zapewniamy, że lista ma zawsze 3 elementy
     while (grinders.length < 3) { grinders.add(''); }
 
     final settingsString = prefs.getString(_lastSettingsKey);
@@ -52,7 +72,7 @@ class UserPreferencesNotifier extends Notifier<UserPreferencesState> {
     }
 
     state = state.copyWith(
-      activeMethods: methods,
+      activeMethods: activeMethods,
       grinders: grinders.take(3).toList(),
       lastGrinderSettings: lastSettings,
     );
@@ -88,6 +108,7 @@ class UserPreferencesNotifier extends Notifier<UserPreferencesState> {
     await prefs.setString(_lastSettingsKey, jsonEncode(newSettings));
     state = state.copyWith(lastGrinderSettings: newSettings);
   }
+
   Future<void> saveAllPreferences(List<String> methods, List<String> grinders) async {
     final prefs = await SharedPreferences.getInstance();
     
