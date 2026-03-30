@@ -12,7 +12,7 @@ const Color appTextSecondary = Color(0xFFA09B96); // Szary tekst pomocniczy
 
 const List<String> brewMethods = [
   'V60', 'Kalita', 'Aeropress', 'Hario Switch', 
-  'Chemex', 'Clever', 'Orea', 'Gabi'
+  'Chemex', 'Clever', 'Orea', 'Gabi', 'V30'
 ];
 
 const Map<String, List<String>> aromaCategories = {
