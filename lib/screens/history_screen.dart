@@ -34,10 +34,8 @@ class HistoryScreen extends ConsumerWidget {
               } else if (value == 'import') {
                 final success = await BackupService.importData();
                 if (success) {
-                  // Odświeżenie stanu historii po udanym imporcie
                   ref.invalidate(historyProvider); 
                   
-                  // Bezpieczne wywołanie SnackBar po operacji asynchronicznej
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -98,37 +96,52 @@ class HistoryItemCard extends ConsumerWidget {
     }
   }
 
+  Color _getMethodColor(String method) {
+    final m = method.toLowerCase();
+    if (m.contains('v60') || m.contains('v30')) return Colors.red.shade400;
+    if (m.contains('aeropress')) return Colors.blue.shade400;
+    if (m.contains('chemex')) return Colors.brown.shade400;
+    if (m.contains('kalita')) return Colors.teal.shade400;
+    if (m.contains('espresso')) return Colors.deepPurple.shade400;
+    if (m.contains('moka')) return Colors.orange.shade600;
+    if (m.contains('clever')) return Colors.cyan.shade600;
+    if (m.contains('switch')) return Colors.green.shade500;
+    if (m.contains('orea')) return Colors.pink.shade300;
+    return Colors.amber; 
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) { 
     final DateTime date = DateTime.tryParse(session['timestamp'] ?? '') ?? DateTime.now();
-    final String coffeeName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
     
-    final String beanDetails = session['beanDetails'] ?? '';
+    // INŻYNIERIA UX: Zamiana hierarchii zmiennych
+    final String roasterName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
+    final String beanName = session['beanDetails']?.toString().isNotEmpty == true ? session['beanDetails'] : 'Unknown Coffee';
+    
+    final String method = session['method']?.toString().isNotEmpty == true ? session['method'] : 'Unknown';
+    final Color methodColor = _getMethodColor(method);
+    
     final List<dynamic> defects = session['defects'] ?? [];
     final List<dynamic> dryNotes = session['dryNotes'] ?? [];
     final List<dynamic> wetNotes = session['wetNotes'] ?? [];
 
-    // INŻYNIERIA BAZY: Odczyt młynka i kalkulacja mikrometrów na żywo
     final grindersAsync = ref.watch(grindersDatabaseProvider);
     final String grinderName = session['grinderName']?.toString().isNotEmpty == true ? session['grinderName'] : '';
     final String clicksStr = session['grinderSetting']?.toString() ?? '0';
     final int clicks = int.tryParse(clicksStr) ?? 0;
     
-    // Szukamy mnożnika w bazie
     final activeGrinder = grindersAsync.value?.where((g) => g.fullName == grinderName).firstOrNull;
     final double activeMultiplier = activeGrinder?.stepMicron ?? 0.0;
     final double microns = clicks * activeMultiplier;
 
-    // NOWE ZMIENNE: Pobieranie zaawansowanych parametrów z zapisanej sesji
     final String recipe = session['recipe'] ?? '';
     final String filterType = session['filterType'] ?? '';
     final String drawdownTime = session['drawdownTime'] ?? '';
-    final double brewCost = (session['brewCost'] as num?)?.toDouble() ?? 0.0; // <--- DODANA ZMIENNA
+    final double brewCost = (session['brewCost'] as num?)?.toDouble() ?? 0.0;
 
-    // INŻYNIERIA UX: Krok A - Zawinięcie karty w Dismissible
     return Dismissible(
       key: Key(session['timestamp'].toString()),
-      direction: DismissDirection.endToStart, // Swipe tylko od prawej do lewej
+      direction: DismissDirection.endToStart, 
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24.0),
@@ -139,7 +152,6 @@ class HistoryItemCard extends ConsumerWidget {
         child: const Icon(Icons.delete_forever, color: Colors.white, size: 32),
       ),
       confirmDismiss: (direction) async {
-        // Okno dialogowe zabezpieczające przed przypadkowym usunięciem
         return await showDialog(
           context: context,
           builder: (BuildContext context) {
@@ -162,38 +174,49 @@ class HistoryItemCard extends ConsumerWidget {
         );
       },
       onDismissed: (direction) async {
-        // Bezpośrednia mutacja pamięci SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         final historyStr = prefs.getString('tasting_history');
         if (historyStr != null) {
           final List<dynamic> decoded = jsonDecode(historyStr);
           decoded.removeWhere((item) => item['timestamp'] == session['timestamp']);
           await prefs.setString('tasting_history', jsonEncode(decoded));
-          
-          // Wymuszenie odświeżenia interfejsu
           ref.invalidate(historyProvider);
         }
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: methodColor.withValues(alpha: 0.35), width: 1.5),
+        ),
         clipBehavior: Clip.antiAlias,
         child: ExpansionTile(
           backgroundColor: const Color(0xFF1E1A18),
           collapsedBackgroundColor: const Color(0xFF1E1A18),
-          title: Text(coffeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          title: Text(beanName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), // Główne ziarno
           subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
+            padding: const EdgeInsets.only(top: 8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (beanDetails.isNotEmpty) ...[
-                  Text(
-                    beanDetails,
-                    style: const TextStyle(fontSize: 14, color: Colors.white, fontStyle: FontStyle.italic),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 6.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: methodColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: methodColor.withValues(alpha: 0.3)),
                   ),
-                  const SizedBox(height: 4),
-                ],
+                  child: Text(
+                    method.toUpperCase(),
+                    style: TextStyle(color: methodColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                ),
+                Text(
+                  roasterName, // Palarnia przesunięta do opisu
+                  style: const TextStyle(fontSize: 14, color: Colors.white, fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   '${DateFormat('yyyy-MM-dd | HH:mm').format(date)}${brewCost > 0 ? '  •  ${brewCost.toStringAsFixed(2)} PLN' : ''}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -216,7 +239,7 @@ class HistoryItemCard extends ConsumerWidget {
                       _buildMiniInfo(Icons.scale, '${session['dose']}g'),
                       _buildMiniInfo(Icons.thermostat, '${session['temperature']}°C'),
                       if (brewCost > 0)
-                        _buildMiniInfo(Icons.payments_outlined, '${brewCost.toStringAsFixed(2)} PLN'), // <--- DODANA IKONA
+                        _buildMiniInfo(Icons.payments_outlined, '${brewCost.toStringAsFixed(2)} PLN'),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -255,9 +278,6 @@ class HistoryItemCard extends ConsumerWidget {
                       ),
                     ),
                   
-                  // ==========================================
-                  // RENDEROWANIE ZAAWANSOWANYCH PARAMETRÓW
-                  // ==========================================
                   if ((recipe.isNotEmpty && recipe != 'Custom') || (filterType.isNotEmpty && filterType != 'Paper (Bleached)') || drawdownTime.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -279,7 +299,6 @@ class HistoryItemCard extends ConsumerWidget {
                       ),
                     ),
                   ],
-                  // ==========================================
 
                   const Divider(height: 32, color: Colors.white10),
 
@@ -313,7 +332,6 @@ class HistoryItemCard extends ConsumerWidget {
                       session['secondaryFlavorSpecific'] 
                     ),
                   ],
-                  // DODANO WSPARCIE DLA TRZECIEGO SMAKU
                   if (session['tertiaryFlavorMain']?.toString().isNotEmpty == true) ...[
                     const SizedBox(height: 8),
                     _buildFlavorRow(
