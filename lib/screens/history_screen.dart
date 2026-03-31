@@ -19,7 +19,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   // INŻYNIERIA DANYCH: Stan filtrów
   final TextEditingController _searchController = TextEditingController();
-  Set<String> _selectedMethods = {};
+  final Set<String> _selectedMethods = {};
   DateTimeRange? _dateRange;
 
   @override
