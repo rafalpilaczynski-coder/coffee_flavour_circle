@@ -4,14 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/user_preferences_provider.dart';
 import '../providers/tasting_provider.dart';
+import '../core/constants.dart'; // INŻYNIERIA BAZY: Dodany import
 
 class PersonalSettingsScreen extends ConsumerStatefulWidget {
   const PersonalSettingsScreen({super.key});
 
-  static const List<String> allMethods = [
-    'V60', 'AeroPress', 'Chemex', 'French Press', 'Moka Pot', 
-    'Espresso', 'Clever Dripper', 'Kalita Wave', 'Phin', 'Cold Brew'
-  ];
+  // USUNIĘTO: static const List<String> allMethods - korzystamy z SSOT (constants.dart)
 
   @override
   ConsumerState<PersonalSettingsScreen> createState() => _PersonalSettingsScreenState();
@@ -122,7 +120,6 @@ class _PersonalSettingsScreenState extends ConsumerState<PersonalSettingsScreen>
                           elevation: 8,
                           borderRadius: BorderRadius.circular(8),
                           color: const Color(0xFF231F1C),
-                          // INŻYNIERIA BŁĘDU: Sztywne ograniczenie wysokości zapobiega awarii renderowania
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxHeight: 250),
                             child: SizedBox(
@@ -162,7 +159,8 @@ class _PersonalSettingsScreenState extends ConsumerState<PersonalSettingsScreen>
               border: Border.all(color: Colors.white10),
             ),
             child: Column(
-              children: PersonalSettingsScreen.allMethods.map((method) {
+              // INŻYNIERIA BAZY: Iterujemy po głównej liście brewMethods z constants.dart
+              children: brewMethods.map((method) {
                 final isActive = _localActiveMethods.contains(method);
                 return CheckboxListTile(
                   title: Text(method, style: const TextStyle(color: Colors.white)),
