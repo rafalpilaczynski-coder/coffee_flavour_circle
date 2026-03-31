@@ -98,7 +98,7 @@ class HistoryItemCard extends ConsumerWidget {
 
   Color _getMethodColor(String method) {
     final m = method.toLowerCase();
-    if (m.contains('v60') || m.contains('v30')) return Colors.red.shade400;
+    if (m.contains('v60')) return Colors.red.shade400;
     if (m.contains('aeropress')) return Colors.blue.shade400;
     if (m.contains('chemex')) return Colors.brown.shade400;
     if (m.contains('kalita')) return Colors.teal.shade400;
@@ -107,6 +107,7 @@ class HistoryItemCard extends ConsumerWidget {
     if (m.contains('clever')) return Colors.cyan.shade600;
     if (m.contains('switch')) return Colors.green.shade500;
     if (m.contains('orea')) return Colors.pink.shade300;
+    if (m.contains('v30')) return Colors.indigo.shade400;
     return Colors.amber; 
   }
 
