@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/coffee_library_provider.dart';
-import '../providers/tasting_provider.dart'; // Wymagane do pobrania historii i bazy palarni
-//import '../core/constants.dart';
+import '../providers/tasting_provider.dart';
 
 class CoffeeLibraryScreen extends ConsumerWidget {
   const CoffeeLibraryScreen({super.key});
@@ -112,23 +111,27 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Wyciąganie i filtrowanie historii dla tej konkretnej paczki
     final historyAsync = ref.watch(historyProvider);
     final history = historyAsync.value ?? [];
     
     final beanBrews = history.where((h) => h['libraryId'] == widget.bean.id).toList();
-    final last5Brews = beanBrews.take(5).toList(); // Zakładamy, że najnowsze są na początku listy
+    final last5Brews = beanBrews.take(5).toList(); 
     
-    // 2. Obliczanie średniej oceny
     double avgEnjoyment = 0.0;
     if (beanBrews.isNotEmpty) {
       final total = beanBrews.fold(0.0, (sum, brew) => sum + ((brew['enjoyment'] as num?)?.toDouble() ?? 0.0));
       avgEnjoyment = total / beanBrews.length;
     }
 
-    // 3. Status zużycia
     final percentLeft = (widget.bean.remainingWeight / widget.bean.initialWeight).clamp(0.0, 1.0);
     final isAlmostEmpty = percentLeft < 0.15;
+
+    // PREDYKCJA: Dni do końca kawy na bazie globalnego Providera
+    final dailyDose = ref.watch(averageDailyDoseProvider);
+    int daysLeft = -1;
+    if (dailyDose > 0 && widget.bean.remainingWeight > 0) {
+      daysLeft = (widget.bean.remainingWeight / dailyDose).ceil();
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -145,7 +148,6 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
         collapsedIconColor: Colors.grey,
         tilePadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         
-        // ZAWARTOSĆ PRZED ROZWINIĘCIEM
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -176,29 +178,57 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 12.0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: percentLeft,
-                    minHeight: 6,
-                    backgroundColor: Colors.black45,
-                    valueColor: AlwaysStoppedAnimation<Color>(isAlmostEmpty ? Colors.redAccent : Colors.amber),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: percentLeft,
+                        minHeight: 6,
+                        backgroundColor: Colors.black45,
+                        valueColor: AlwaysStoppedAnimation<Color>(isAlmostEmpty ? Colors.redAccent : Colors.amber),
+                      ),
+                    ),
                   ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 50,
+                    child: Text('${widget.bean.remainingWeight.toInt()}g', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAlmostEmpty ? Colors.redAccent : Colors.white70), textAlign: TextAlign.right),
+                  ),
+                ],
+              ),
+              // INŻYNIERIA UI: Moduł prognozowania
+              if (daysLeft > 0) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Icon(
+                      Icons.insights, 
+                      size: 12, 
+                      color: daysLeft <= 3 ? Colors.redAccent : (daysLeft <= 7 ? Colors.amber : Colors.greenAccent)
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Estimated: ~$daysLeft days left',
+                      style: TextStyle(
+                        fontSize: 10, 
+                        fontWeight: FontWeight.bold,
+                        fontStyle: FontStyle.italic,
+                        color: daysLeft <= 3 ? Colors.redAccent : (daysLeft <= 7 ? Colors.amber : Colors.greenAccent),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 50,
-                child: Text('${widget.bean.remainingWeight.toInt()}g', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAlmostEmpty ? Colors.redAccent : Colors.white70), textAlign: TextAlign.right),
-              ),
+              ],
             ],
           ),
         ),
 
-        // ZAWARTOSĆ PO ROZWINIĘCIU
         children: [
           Container(
             color: Colors.black12,
@@ -206,7 +236,6 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // POLE 1: KOSZT
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -266,7 +295,6 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
                   child: Divider(color: Colors.white10, height: 1),
                 ),
 
-                // POLE 2: HISTORIA OSTATNICH 5 PARZEŃ
                 const Text('Last 5 Brews Enjoyment:', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 
@@ -277,7 +305,6 @@ class _CoffeeBagCardState extends ConsumerState<_CoffeeBagCard> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: last5Brews.map((brew) {
                       final val = (brew['enjoyment'] as num?)?.toDouble() ?? 0.0;
-                      // Dynamiczny kolor na podstawie oceny
                       Color badgeColor = Colors.grey;
                       if (val >= 4.0) {badgeColor = Colors.green;}
                       else if (val >= 3.0) {badgeColor = Colors.amber;}

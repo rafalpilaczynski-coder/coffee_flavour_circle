@@ -433,7 +433,7 @@ class _BrewRatioTabState extends ConsumerState<_BrewRatioTab> {
 }
 
 // ============================================================================
-// ZAKŁADKA 3: INŻYNIERIA KOSZTÓW (Ekonomia Parzenia)
+// ZAKŁADKA 3: INŻYNIERIA KOSZTÓW I ZUŻYCIA (Dashboard)
 // ============================================================================
 class _EconomicsTab extends ConsumerWidget {
   const _EconomicsTab();
@@ -446,49 +446,74 @@ class _EconomicsTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, stack) => Center(child: Text('Error: $err')),
       data: (sessions) {
-        // Filtrujemy tylko te parzenia, które posiadają zdefiniowany koszt > 0
-        final costSessions = sessions.where((s) => ((s['brewCost'] as num?)?.toDouble() ?? 0.0) > 0).toList();
-
-        if (costSessions.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32.0),
-              child: Text(
-                'No financial data yet.\n\nMake sure to add prices to your Coffee Bags in the Library. Future brews will automatically calculate the price per cup.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, height: 1.5),
-              ),
-            ),
-          );
+        if (sessions.isEmpty) {
+          return const Center(child: Text('No data available.', style: TextStyle(color: Colors.grey)));
         }
 
+        // 1. Zmienne do wyliczeń
         double totalSpent = 0.0;
+        double totalDoseAll = 0.0;
+        double totalVolumeAll = 0.0;
+        double volumeWithCost = 0.0;
+        int sessionsWithCost = 0;
+
+        DateTime? firstDate;
+        DateTime? lastDate;
         Map<String, double> monthlySpent = {};
 
-        for (var s in costSessions) {
-          final cost = (s['brewCost'] as num).toDouble();
-          totalSpent += cost;
+        // 2. Iteracja po całej historii
+        for (var s in sessions) {
+          final dose = (s['dose'] as num?)?.toDouble() ?? 0.0;
+          final volume = (s['waterVolume'] as num?)?.toDouble() ?? 0.0;
+          final cost = (s['brewCost'] as num?)?.toDouble() ?? 0.0;
+          
+          totalDoseAll += dose;
+          totalVolumeAll += volume;
 
           final dateStr = s['timestamp'] as String?;
           if (dateStr != null) {
             final date = DateTime.tryParse(dateStr);
             if (date != null) {
-              final monthKey = DateFormat('MMM yyyy').format(date); // np. Mar 2026
-              monthlySpent[monthKey] = (monthlySpent[monthKey] ?? 0.0) + cost;
+              if (firstDate == null || date.isBefore(firstDate)) firstDate = date;
+              if (lastDate == null || date.isAfter(lastDate)) lastDate = date;
+
+              if (cost > 0) {
+                final monthKey = DateFormat('MMM yyyy').format(date);
+                monthlySpent[monthKey] = (monthlySpent[monthKey] ?? 0.0) + cost;
+              }
             }
+          }
+
+          if (cost > 0) {
+            totalSpent += cost;
+            volumeWithCost += volume;
+            sessionsWithCost++;
           }
         }
 
-        final avgCost = totalSpent / costSessions.length;
+        // 3. Kalkulacja statystyk czasowych (Span)
+        int daysSpan = 1;
+        if (firstDate != null && lastDate != null) {
+          // Dodajemy +1, aby uwzględnić dzień bieżący (jeśli pierwszy i ostatni log są z tego samego dnia, span = 1)
+          daysSpan = lastDate.difference(firstDate).inDays + 1;
+          if (daysSpan < 1) daysSpan = 1; 
+        }
 
-        // Sortowanie kluczy chronologicznie
+        // 4. Kalkulacja KPI
+        final cupsPerDay = sessions.length / daysSpan;
+        final dosePerDay = totalDoseAll / daysSpan;
+        final totalYieldLiters = totalVolumeAll / 1000;
+        
+        final costPerLiter = volumeWithCost > 0 ? totalSpent / (volumeWithCost / 1000) : 0.0;
+        final avgCostPerCup = sessionsWithCost > 0 ? totalSpent / sessionsWithCost : 0.0;
+
+        // Przygotowanie danych do wykresu
         final sortedKeys = monthlySpent.keys.toList()..sort((a, b) {
           final dA = DateFormat('MMM yyyy').parse(a);
           final dB = DateFormat('MMM yyyy').parse(b);
           return dA.compareTo(dB);
         });
 
-        // Dane do wykresu słupkowego
         List<BarChartGroupData> barGroups = [];
         double maxSpent = 0.0;
         for (int i = 0; i < sortedKeys.length; i++) {
@@ -506,7 +531,7 @@ class _EconomicsTab extends ConsumerWidget {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                   backDrawRodData: BackgroundBarChartRodData(
                     show: true,
-                    toY: maxSpent * 1.2, // Tło trochę powyżej maksymalnego słupka
+                    toY: maxSpent > 0 ? maxSpent * 1.2 : 10, 
                     color: Colors.white.withValues(alpha: 0.05),
                   ),
                 ),
@@ -515,141 +540,153 @@ class _EconomicsTab extends ConsumerWidget {
           );
         }
 
-        return Padding(
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // GŁÓWNA KARTA PODSUMOWUJĄCA
-              Card(
-                color: const Color(0xFF1E1A18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Colors.white10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.account_balance_wallet, color: Colors.greenAccent, size: 32),
-                      const SizedBox(height: 12),
-                      const Text('Total Value Consumed', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${totalSpent.toStringAsFixed(2)} PLN',
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16.0),
-                        child: Divider(color: Colors.white10, height: 1),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Column(
-                            children: [
-                              const Text('Avg Cost / Cup', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 4),
-                              Text('${avgCost.toStringAsFixed(2)} PLN', style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          Container(width: 1, height: 30, color: Colors.white10),
-                          Column(
-                            children: [
-                              const Text('Tracked Brews', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 4),
-                              Text('${costSessions.length}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
+              const Text('DASHBOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.grey)),
+              const SizedBox(height: 16),
+              
+              // SIATKA KPI
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                childAspectRatio: 1.6,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                children: [
+                  _buildKpiCard('Total Spent', '${totalSpent.toStringAsFixed(2)} PLN', Icons.account_balance_wallet, Colors.greenAccent),
+                  _buildKpiCard('Avg / Cup', '${avgCostPerCup.toStringAsFixed(2)} PLN', Icons.local_cafe, Colors.amber),
+                  _buildKpiCard('Brews / Day', cupsPerDay.toStringAsFixed(1), Icons.bar_chart, Colors.lightBlueAccent),
+                  _buildKpiCard('Dose / Day', '${dosePerDay.toStringAsFixed(1)}g', Icons.scale, Colors.orangeAccent),
+                  _buildKpiCard('Total Yield', '${totalYieldLiters.toStringAsFixed(1)}L', Icons.water_drop, Colors.cyan),
+                  _buildKpiCard('Price / Liter', '${costPerLiter.toStringAsFixed(2)} PLN', Icons.price_check, Colors.purpleAccent),
+                ],
               ),
               
-              const SizedBox(height: 32),
-              const Text('Monthly Spending Breakdown', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.amber)),
+              const SizedBox(height: 40),
+              const Text('MONTHLY SPENDING BREAKDOWN', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.grey)),
               const SizedBox(height: 32),
               
-              // WYKRES MIESIĘCZNY
-              Expanded(
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: maxSpent * 1.2, // Lekki margines na górze
-                    minY: 0.0,
-                    barTouchData: BarTouchData(
-                      enabled: true,
-                      touchTooltipData: BarTouchTooltipData(
-                        getTooltipColor: (group) => const Color(0xFF1E1A18),
-                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                          final month = sortedKeys[group.x.toInt()];
-                          return BarTooltipItem(
-                            '$month\n',
-                            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                            children: [
-                              TextSpan(text: '${rod.toY.toStringAsFixed(2)} PLN', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 14, fontWeight: FontWeight.bold)),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 40,
-                          getTitlesWidget: (value, meta) {
-                            if (value == 0 || value > maxSpent) return const SizedBox.shrink();
-                            return Text('${value.toInt()}', style: const TextStyle(color: Colors.white70, fontSize: 11));
+              // WYKRES MIESIĘCZNY (Zabezpieczony przed brakiem danych kosztowych)
+              if (sortedKeys.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32.0),
+                  child: Text(
+                    'No financial data recorded yet.\nSet coffee prices in your library to see charts.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white38, fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 250,
+                  child: BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: maxSpent * 1.2,
+                      minY: 0.0,
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipColor: (group) => const Color(0xFF1E1A18),
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            final month = sortedKeys[group.x.toInt()];
+                            return BarTooltipItem(
+                              '$month\n',
+                              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              children: [
+                                TextSpan(text: '${rod.toY.toStringAsFixed(2)} PLN', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 14, fontWeight: FontWeight.bold)),
+                              ],
+                            );
                           },
                         ),
                       ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 36,
-                          getTitlesWidget: (value, meta) {
-                            final index = value.toInt();
-                            if (index >= 0 && index < sortedKeys.length) {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(sortedKeys[index], style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                            getTitlesWidget: (value, meta) {
+                              if (value == 0 || value > maxSpent) return const SizedBox.shrink();
+                              return Text('${value.toInt()}', style: const TextStyle(color: Colors.white70, fontSize: 11));
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.toInt();
+                              if (index >= 0 && index < sortedKeys.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(sortedKeys[index], style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
                         ),
                       ),
-                    ),
-                    borderData: FlBorderData(
-                      show: true,
-                      border: const Border(
-                        bottom: BorderSide(color: Colors.white24, width: 2),
-                        left: BorderSide(color: Colors.white24, width: 2),
-                        top: BorderSide.none,
-                        right: BorderSide.none,
+                      borderData: FlBorderData(
+                        show: true,
+                        border: const Border(
+                          bottom: BorderSide(color: Colors.white24, width: 2),
+                          left: BorderSide(color: Colors.white24, width: 2),
+                          top: BorderSide.none,
+                          right: BorderSide.none,
+                        ),
                       ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1, dashArray: [5, 5]),
+                      ),
+                      barGroups: barGroups,
                     ),
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: false,
-                      getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1, dashArray: [5, 5]),
-                    ),
-                    barGroups: barGroups,
+                    duration: const Duration(milliseconds: 600), 
+                    curve: Curves.easeOutQuart,
                   ),
-                  duration: const Duration(milliseconds: 600), 
-                  curve: Curves.easeOutQuart,
                 ),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 40),
             ],
           ),
         );
       },
+    );
+  }
+
+  // Pomocniczy widget do generowania kafelków KPI
+  Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1A18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          const Spacer(),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

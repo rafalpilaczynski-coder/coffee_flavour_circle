@@ -9,11 +9,212 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 
-class HistoryScreen extends ConsumerWidget {
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  // INŻYNIERIA DANYCH: Stan filtrów
+  final TextEditingController _searchController = TextEditingController();
+  Set<String> _selectedMethods = {};
+  DateTimeRange? _dateRange;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool get _isFilterActive => 
+      _searchController.text.isNotEmpty || _selectedMethods.isNotEmpty || _dateRange != null;
+
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedMethods.clear();
+      _dateRange = null;
+    });
+  }
+
+  void _showFilterSheet(List<String> availableMethods) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75, // Zabezpieczenie przed klawiaturą
+              decoration: const BoxDecoration(
+                color: Color(0xFF14110F),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16.0, right: 16.0, top: 16.0, 
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 16.0 // Margines na klawiaturę
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Nagłówek Panelu
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Filter History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                        TextButton(
+                          onPressed: () {
+                            setModalState(() {
+                              _searchController.clear();
+                              _selectedMethods.clear();
+                              _dateRange = null;
+                            });
+                            setState(() {}); // Aktualizacja ekranu głównego
+                          },
+                          child: const Text('CLEAR ALL', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        )
+                      ],
+                    ),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+
+                    // 1. Filtr Tekstowy (Kawa / Palarnia)
+                    const Text('COFFEE OR ROASTER', style: TextStyle(color: Color(0xFFC27D56), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search beans, origins, roasters...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        filled: true,
+                        fillColor: const Color(0xFF1E1A18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      ),
+                      onChanged: (val) {
+                        setState(() {}); // Natychmiastowe odświeżenie listy pod spodem
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 2. Zakres Dat
+                    const Text('DATE RANGE', style: TextStyle(color: Color(0xFFC27D56), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                          initialDateRange: _dateRange,
+                          builder: (context, child) {
+                            return Theme(
+                              data: ThemeData.dark().copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Colors.amber,
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF1E1A18),
+                                  onSurface: Colors.white,
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setModalState(() => _dateRange = picked);
+                          setState(() {});
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1A18),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_month, color: Colors.grey, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _dateRange == null 
+                                    ? 'Select dates...' 
+                                    : '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}',
+                                style: TextStyle(color: _dateRange == null ? Colors.white38 : Colors.white),
+                              ),
+                            ),
+                            if (_dateRange != null)
+                              GestureDetector(
+                                onTap: () {
+                                  setModalState(() => _dateRange = null);
+                                  setState(() {});
+                                },
+                                child: const Icon(Icons.close, color: Colors.grey, size: 18),
+                              )
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 3. Metody Parzenia (Dynamicznie zebrane z historii)
+                    const Text('BREW METHODS', style: TextStyle(color: Color(0xFFC27D56), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: availableMethods.map((method) {
+                            final isSelected = _selectedMethods.contains(method);
+                            return FilterChip(
+                              label: Text(method, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 12)),
+                              selected: isSelected,
+                              selectedColor: Colors.amber.withValues(alpha: 0.3),
+                              checkmarkColor: Colors.amber,
+                              backgroundColor: const Color(0xFF1E1A18),
+                              side: BorderSide(color: isSelected ? Colors.amber : Colors.white10),
+                              onSelected: (selected) {
+                                setModalState(() {
+                                  if (selected) {
+                                    _selectedMethods.add(method);
+                                  } else {
+                                    _selectedMethods.remove(method);
+                                  }
+                                });
+                                setState(() {});
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+
+                    // Przycisk zamykający
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC27D56)),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('APPLY FILTERS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                  ],
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final historyAsync = ref.watch(historyProvider);
 
     return Scaffold(
@@ -21,8 +222,37 @@ class HistoryScreen extends ConsumerWidget {
         title: const Text('Brewing History'), 
         centerTitle: true,
         actions: [
+          // INŻYNIERIA UI: Ikona lejka podświetlana gdy filtr jest aktywny
+          historyAsync.when(
+            data: (sessions) {
+              final availableMethods = sessions
+                  .map((s) => s['method']?.toString() ?? '')
+                  .where((m) => m.isNotEmpty)
+                  .toSet()
+                  .toList()..sort();
+                  
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.filter_list, color: _isFilterActive ? Colors.amber : Colors.white),
+                    tooltip: 'Filter History',
+                    onPressed: () => _showFilterSheet(availableMethods),
+                  ),
+                  if (_isFilterActive)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
+                    )
+                ],
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+          ),
           IconButton(
-            icon: const Icon(Icons.analytics_outlined, color: Colors.amber),
+            icon: const Icon(Icons.analytics_outlined, color: Colors.white70),
             tooltip: 'Statistics & Correlations',
             onPressed: () => context.push('/statistics'),
           ),
@@ -35,7 +265,6 @@ class HistoryScreen extends ConsumerWidget {
                 final success = await BackupService.importData();
                 if (success) {
                   ref.invalidate(historyProvider); 
-                  
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -70,13 +299,70 @@ class HistoryScreen extends ConsumerWidget {
         ],
       ),
       body: historyAsync.when(
-        data: (sessions) => sessions.isEmpty
-            ? const Center(child: Text('No sessions recorded yet.', style: TextStyle(color: Colors.grey)))
-            : ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: sessions.length,
-                itemBuilder: (context, index) => HistoryItemCard(session: sessions[index]),
+        data: (allSessions) {
+          if (allSessions.isEmpty) {
+            return const Center(child: Text('No sessions recorded yet.', style: TextStyle(color: Colors.grey)));
+          }
+
+          // INŻYNIERIA DANYCH: Logika filtrowania listy
+          final filteredSessions = allSessions.where((session) {
+            // 1. Filtr Tekstowy (Kawa)
+            if (_searchController.text.isNotEmpty) {
+              final query = _searchController.text.toLowerCase();
+              final roaster = (session['coffeeName'] ?? '').toString().toLowerCase();
+              final bean = (session['beanDetails'] ?? '').toString().toLowerCase();
+              if (!roaster.contains(query) && !bean.contains(query)) {
+                return false;
+              }
+            }
+
+            // 2. Filtr Metod
+            if (_selectedMethods.isNotEmpty) {
+              final method = (session['method'] ?? '').toString();
+              if (!_selectedMethods.contains(method)) {
+                return false;
+              }
+            }
+
+            // 3. Filtr Daty
+            if (_dateRange != null) {
+              final dateStr = session['timestamp'] as String?;
+              if (dateStr == null) return false;
+              final date = DateTime.tryParse(dateStr);
+              if (date == null) return false;
+
+              // Używamy .add(Duration(days: 1)), aby objąć cały dzień końcowy aż do 23:59:59
+              if (date.isBefore(_dateRange!.start) || date.isAfter(_dateRange!.end.add(const Duration(days: 1)))) {
+                return false;
+              }
+            }
+
+            return true; // Przeszło wszystkie filtry
+          }).toList();
+
+          if (filteredSessions.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text('No brews match your filters.', style: TextStyle(color: Colors.grey)),
+                  TextButton(
+                    onPressed: _clearFilters,
+                    child: const Text('CLEAR FILTERS', style: TextStyle(color: Colors.amber)),
+                  )
+                ],
               ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: filteredSessions.length,
+            itemBuilder: (context, index) => HistoryItemCard(session: filteredSessions[index]),
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
       ),
@@ -84,6 +370,7 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
+// Reszta kodu (HistoryItemCard) pozostaje bez zmian.
 class HistoryItemCard extends ConsumerWidget { 
   final Map<String, dynamic> session;
   const HistoryItemCard({super.key, required this.session});
@@ -115,7 +402,6 @@ class HistoryItemCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) { 
     final DateTime date = DateTime.tryParse(session['timestamp'] ?? '') ?? DateTime.now();
     
-    // INŻYNIERIA UX: Zamiana hierarchii zmiennych
     final String roasterName = session['coffeeName']?.toString().isNotEmpty == true ? session['coffeeName'] : 'Unknown Roaster';
     final String beanName = session['beanDetails']?.toString().isNotEmpty == true ? session['beanDetails'] : 'Unknown Coffee';
     
@@ -194,7 +480,7 @@ class HistoryItemCard extends ConsumerWidget {
         child: ExpansionTile(
           backgroundColor: const Color(0xFF1E1A18),
           collapsedBackgroundColor: const Color(0xFF1E1A18),
-          title: Text(beanName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), // Główne ziarno
+          title: Text(beanName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child: Column(
@@ -214,7 +500,7 @@ class HistoryItemCard extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  roasterName, // Palarnia przesunięta do opisu
+                  roasterName,
                   style: const TextStyle(fontSize: 14, color: Colors.white, fontStyle: FontStyle.italic),
                 ),
                 const SizedBox(height: 4),

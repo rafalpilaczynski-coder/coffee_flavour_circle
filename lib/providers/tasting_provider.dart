@@ -612,3 +612,36 @@ final grindersDatabaseProvider = FutureProvider<List<GrinderModel>>((ref) async 
     return [];
   }
 });
+
+// INŻYNIERIA DANYCH: Globalny kalkulator średniego dziennego zużycia kawy
+final averageDailyDoseProvider = Provider<double>((ref) {
+  final historyAsync = ref.watch(historyProvider);
+  final history = historyAsync.value ?? [];
+  
+  if (history.isEmpty) return 0.0;
+
+  double totalDose = 0.0;
+  DateTime? firstDate;
+  DateTime? lastDate;
+
+  for (var s in history) {
+    totalDose += (s['dose'] as num?)?.toDouble() ?? 0.0;
+    
+    final dateStr = s['timestamp'] as String?;
+    if (dateStr != null) {
+      final date = DateTime.tryParse(dateStr);
+      if (date != null) {
+        if (firstDate == null || date.isBefore(firstDate)) firstDate = date;
+        if (lastDate == null || date.isAfter(lastDate)) lastDate = date;
+      }
+    }
+  }
+
+  int daysSpan = 1;
+  if (firstDate != null && lastDate != null) {
+    daysSpan = lastDate.difference(firstDate).inDays + 1;
+    if (daysSpan < 1) daysSpan = 1; 
+  }
+
+  return totalDose / daysSpan;
+});
